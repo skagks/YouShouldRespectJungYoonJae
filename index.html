@@ -2,8 +2,9 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=0.4">
-    <title>젠장 정윤재</title>
+    <meta name="viewport" content="width=1300">
+    <title>[Web발신]너는정윤재를존중해야한다</title>
+    <link rel="icon" type="image/png" href="./favicon.png">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;700;900&diplay=swap');
 
@@ -31,12 +32,17 @@
             color: var(--color-text-main);
             font-family: 'Noto Serif KR', serif;
             margin: 0; padding: 10px; box-sizing: border-box;
-            height: 100vh; overflow: hidden; display: flex; flex-direction: column;
+            min-height: 100vh; overflow-y: auto; 
+            display: flex; flex-direction: column;
+            min-width: 1200px;
         }
 
         .game-layout {
             display: grid; grid-template-columns: 280px 1fr 340px;
             gap: 15px; flex-grow: 1; height: calc(100vh - 50px);
+        }
+        .game-layout > div {
+            min-width: 0; 
         }
 
         /* 🎭 이벤트 화면 전용 레이아웃 */
@@ -51,6 +57,11 @@
            align-items: center;
            width: 100%;
            box-sizing: border-box;
+        }
+        /* 🎭 이벤트 텍스트 페이드인 애니메이션 */
+        @keyframes fadeChar {
+            0% { opacity: 0; transform: translateX(-4px); }
+            100% { opacity: 1; transform: translateX(0); }
         }
 
         .panel {
@@ -73,6 +84,8 @@
             border-color: var(--color-blood); 
             box-shadow: inset 0 0 40px rgba(142, 36, 36, 0.2);
             gap: 15px;
+            overflow-x: hidden;
+            word-break: break-word;
         }
         .event-panel-right {
             padding: 25px; 
@@ -92,15 +105,7 @@
             filter: grayscale(30%) sepia(20%) contrast(1.1);
         }
 
-        
-            .event-view .panel { height: auto; overflow: visible; }
-            .event-panel-left, .event-panel-right { padding: 15px; }
-            #event-image { max-height: 250px; }
-            #event-title { font-size: 22px !important; margin-bottom: 10px !important; }
-            #event-text { font-size: 16px !important; line-height: 1.6 !important; }
-            #event-choices-title { font-size: 18px !important; margin-bottom: 15px !important; }
-            .btn-event-choice { padding: 12px 15px !important; font-size: 14px !important; }
-        }
+     
         
         .top-bar {
             background-color: var(--color-panel-bg); 
@@ -113,12 +118,28 @@
             font-size: 15px; margin-bottom: 10px; font-weight: bold;
         }
 
-        /* 🗺️ 육각형(Hex) 맵 구역 */
+        /* 🗺️ 육각형(Hex) 맵 구역 (카메라 뷰어로 업그레이드) */
         .map-zone {
             background-color: #0a0807; background-image: var(--bg-noise);
             border: 2px solid var(--color-border); border-radius: 4px;
-            padding: 20px; display: flex; justify-content: flex-start; align-items: flex-start; margin-bottom: 10px;
-            overflow: auto; box-shadow: inset 0 0 30px #000;
+            padding: 0; overflow: hidden; position: relative; 
+            margin-bottom: 10px; box-shadow: inset 0 0 30px #000;
+            display: block; cursor: grab; touch-action: none;
+            
+            /* 💡 핵심: 맵이 커져도 절대 다른 UI를 밀어내지 못하도록 높이와 너비를 틀에 맞게 꽉 잠급니다. */
+            flex: 0 0 380px; 
+            height: 380px; 
+            max-height: 380px;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+        .map-zone:active { cursor: grabbing; }
+        
+        #board-container, #editor-board-container {
+            transform-origin: 0 0;
+            will-change: transform;
+            position: relative;
         }
         
         .hex-tile {
@@ -349,38 +370,51 @@
 
         .scenario-pin {
             position: absolute;
-            transform: translate(-50%, -100%);
+            /* 1. 상자가 강제로 늘어나서 화질이 깨지는 걸 막기 위해 역보정 복구 */
+            transform: translate(-50%, -100%) scale(var(--inv-scale, 1));
+            transform-origin: 50% 100%; 
             cursor: pointer;
             display: flex;
             flex-direction: column;
             align-items: center;
-            transition: transform 0.2s;
             z-index: 10;
             pointer-events: auto;
         }
+        
         .scenario-pin:hover {
-            transform: translate(-50%, -110%) scale(1.1);
+            transform: translate(-50%, -100%) scale(calc(var(--inv-scale, 1) * 1.15));
+            z-index: 20;
         }
+
         .pin-icon {
-            font-size: 32px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-            filter: drop-shadow(0 0 2px #000);
+            /* 💡 22px -> 16px 로 축소 */
+            font-size: calc(16px * var(--map-scale, 1)); 
+            text-shadow: calc(1.5px * var(--map-scale, 1)) calc(1.5px * var(--map-scale, 1)) calc(3px * var(--map-scale, 1)) rgba(0,0,0,0.8);
+            filter: drop-shadow(0 0 calc(1.5px * var(--map-scale, 1)) #000);
         }
+
         .pin-label {
             background: rgba(10, 8, 7, 0.9);
             color: var(--color-text-main);
-            padding: 4px 8px;
-            border-radius: 2px;
-            font-size: 12px;
+            /* 💡 여백: 3px 6px -> 2px 4px 로 축소 */
+            padding: calc(2px * var(--map-scale, 1)) calc(4px * var(--map-scale, 1)); 
+            border-radius: calc(2px * var(--map-scale, 1));
+            /* 💡 폰트 크기: 10px -> 8px 로 축소 */
+            font-size: calc(8px * var(--map-scale, 1)); 
             font-weight: bold;
             white-space: nowrap;
-            border: 1px solid var(--color-border);
-            margin-top: -5px;
+            border: calc(1px * var(--map-scale, 1)) solid var(--color-border);
+            /* 💡 위쪽 간격 축소 */
+            margin-top: calc(-2px * var(--map-scale, 1)); 
             pointer-events: none;
-            box-shadow: 0 2px 5px #000;
+            box-shadow: 0 calc(2px * var(--map-scale, 1)) calc(4px * var(--map-scale, 1)) #000;
         }
+
         /* 거점 핀 특수 스타일 */
-        .base-pin .pin-icon { font-size: 40px; }
+        .base-pin .pin-icon { 
+            /* 💡 거점 핀 크기: 28px -> 20px 로 축소 */
+            font-size: calc(20px * var(--map-scale, 1)); 
+        }
         .base-pin .pin-label { border-color: var(--color-text-highlight); color: var(--color-text-highlight); }
 
         /* 에디터 전용 스타일 */
@@ -400,11 +434,14 @@
         #card-draw-overlay {
             backdrop-filter: blur(4px);
             transition: opacity 0.3s ease;
+            
+            /* 💡 핵심 수정: fixed 대신 absolute를 사용하여 부모창(.map-zone) 크기에만 맞춤 고정 */
             position: absolute !important;
             top: 0 !important;
             left: 0 !important;
             width: 100% !important;
             height: 100% !important;
+            
             box-sizing: border-box !important;
             margin: 0 !important;
             padding: 10px !important;
@@ -519,16 +556,30 @@
         }
 
         .reveal-card-wrapper.unselected {
-            opacity: 0.25;
-            transform: scale(0.85) translateY(15px);
-            filter: blur(1px) grayscale(50%) sepia(50%);
+            opacity: 0.3;
+            transform: scale(0.8) translateY(15px);
+            /* 💡 선택 안 된 카드는 블러 + 어두워짐 + 흑백 효과 강화 */
+            filter: blur(2px) grayscale(50%) brightness(0.3); 
             transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .reveal-card-wrapper.selected-glow {
-            transform: scale(1.1) translateY(-5px);
+            /* 💡 선택된 카드는 살짝 커지면서 강렬한 빛을 뿜음 */
+            transform: scale(1.15) translateY(-10px); 
             z-index: 50;
+            box-shadow: 0 0 30px rgba(200, 161, 101, 0.7);
             transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        /* 🎯 다중 타겟 선택 시 타일 표시 효과 추가 */
+        .hex-tile.selected-target::before {
+            background-color: #6a1b1b;
+            box-shadow: inset 0 0 20px var(--color-blood);
+        }
+        .hex-tile.selected-target::after {
+            content: '✔️'; position: absolute; top: 45%; left: 50%;
+            transform: translate(-50%, -50%); font-size: 26px; z-index: 20;
+            color: #fff; pointer-events: none; filter: drop-shadow(0 0 5px #000);
         }
         
         /* 범용 모달 스타일 */
@@ -576,7 +627,51 @@
     </style>
 </head>
 <body>
+<div id="intro-layout" style="display:flex; justify-content:center; align-items:center; flex-direction:column; gap: 20px; z-index: 5000; width: 100%; min-height: calc(100vh - 60px); box-sizing: border-box; padding: 20px;">
+    <div class="panel" style="width: 90%; max-width: 600px; text-align: center; padding: 40px; position: relative; margin: 0 auto;">
+        <h1 style="color: var(--color-text-highlight); font-size: 36px; margin-top:0; margin-bottom: 10px; text-shadow: 2px 2px 4px #000;">젠장 정윤재</h1>
+        
+        <div id="mode-selection-area">
+            <p style="color: #a1887f; margin-bottom: 30px;">플레이 모드를 선택하세요.</p>
+            <div style="display:flex; justify-content:center; gap:20px;">
+                <button class="btn-event-choice" style="width:220px; padding: 15px;" onclick="startSinglePlayer()">
+                    <span style="font-size:20px;">👤 1인 플레이</span><br>
+                    <span style="font-size:12px; color:#e57373;">체력/공격력 2배 버프 적용</span>
+                </button>
+                <button class="btn-event-choice" style="width:220px; padding: 15px;" onclick="showMenu('multi-menu-area')">
+                    <span style="font-size:20px;">👥 멀티 플레이</span><br>
+                    <span style="font-size:12px; color:#81c784;">친구들과 온라인 실시간 협동</span>
+                </button>
+            </div>
+        </div>
 
+        <div id="multi-menu-area" style="display:none;">
+            <p style="color: #a1887f; margin-bottom: 20px;">[ 온라인 멀티플레이 ]</p>
+            <button class="btn-primary" style="padding:15px 30px; margin-bottom:20px; font-size:18px;" onclick="createRoom()">새로운 방 만들기 (방장)</button>
+            <br>
+            <div style="display:inline-block; border-top:1px solid var(--color-border); padding-top:20px; margin-top:5px;">
+                <input type="text" id="join-room-code" placeholder="방 코드 4자리" maxlength="4" style="padding:12px; text-align:center; width:120px; background:#1a1412; color:#fff; border:1px solid var(--color-border); font-size:18px; text-transform:uppercase; font-weight:bold;">
+                <button class="btn-danger" style="padding:12px 20px; font-size:18px;" onclick="joinRoom()">방 참가</button>
+            </div>
+            <br><br>
+            <button class="btn-event-choice" style="padding:5px 15px; width:auto;" onclick="showMenu('mode-selection-area')">⬅️ 뒤로가기</button>
+        </div>
+
+        <div id="lobby-area" style="display:none;">
+            <h2 style="color: var(--color-text-highlight); margin-top:0;">방 코드: <span id="display-room-code" style="color:#fff; background:#2a1e18; padding:2px 10px; border-radius:4px; letter-spacing:2px;">----</span></h2>
+            <p id="lobby-status" style="color: #a1887f; margin-bottom: 20px;">친구들이 접속하기를 기다리는 중...</p>
+            
+            <div id="lobby-players" style="display:flex; justify-content:center; gap:15px; margin-bottom: 30px; min-height: 120px; border: 1px solid var(--color-border-dark); padding: 15px; background: rgba(0,0,0,0.3);"></div>
+
+            <div style="margin-bottom: 20px;" id="lobby-class-select-zone">
+                <p style="color:#a1887f; font-size:14px; margin-bottom:10px;">내 직업 선택 (클릭)</p>
+                <div id="lobby-class-container" style="display:flex; flex-wrap:wrap; justify-content:center; gap:10px;"></div>
+            </div>
+
+            <button id="btn-start-multi" class="btn-danger" style="padding:15px 40px; font-size:18px; box-shadow: 0 4px 15px rgba(0,0,0,0.8); display:none;" onclick="hostStartGame()">전장으로 출발 (방장 전용)</button>
+        </div>
+    </div>
+</div>
 <!-- 🔍 덱 뷰어 모달 -->
 <div id="card-viewer-modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(5,4,3,0.9); backdrop-filter:blur(3px); z-index:9999; flex-direction:column; align-items:center; justify-content:center;">
     <div style="background-color:var(--color-panel-bg); background-image:var(--bg-noise); padding:20px; border-radius:4px; width:85%; max-width:600px; max-height:85%; display:flex; flex-direction:column; border:2px solid var(--color-border); box-shadow:0 10px 40px #000;">
@@ -645,12 +740,19 @@
 </div>
 
 <!-- 🗺️ 전역 지도 레이아웃 -->
-<div class="game-layout" id="world-map-layout" style="display: flex; justify-content: center; align-items: center; position: relative;">
-    <div id="world-map-container" style="position: relative; width: fit-content; max-width: 100%; max-height: 100%; overflow: auto; border: 2px solid var(--color-border); border-radius: 4px; box-shadow:0 0 20px #000;">
-        <img src="https://itimg.kr/5341/UH.jpg" alt="World Map" id="world-map-img" style="display: block; width: 800px; height: auto; filter: sepia(30%) brightness(0.8) contrast(1.1);">
-        <div id="pins-container" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"></div>
+<div class="game-layout" id="world-map-layout" style="display: none; justify-content: center; align-items: center; width: 100%;">
+    <div class="map-zone" style="flex: 1; max-width: 1000px; height: calc(100vh - 100px); max-height: 800px; margin: 0 auto; border: 2px solid var(--color-border); box-shadow: 0 0 20px #000; overflow: hidden; touch-action: none;">
+        
+        <div id="world-map-board-container" style="position: relative; display: inline-block; width: 1600px; transform-origin: 0 0; will-change: transform;">
+            
+            <img src="./map.png" alt="World Map" id="world-map-img" onload="this.parentElement.style.height = this.offsetHeight + 'px';" style="display: block; width: 1600px; height: auto; filter: sepia(30%) brightness(0.8) contrast(1.1); pointer-events: none; user-select: none; -webkit-user-drag: none;">
+            
+            <div id="pins-container" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none;"></div>
+        </div>
+        
     </div>
 </div>
+
 
 <!-- 🎭 이벤트 전용 레이아웃 (독립된 뷰) -->
 <div class="event-view" id="event-layout" style="display:none;">
@@ -659,7 +761,7 @@
         <img id="event-image" src="" alt="Event Scene">
         <div style="flex-grow: 1;">
             <h2 id="event-title" style="color: var(--color-text-highlight); margin-top: 0; margin-bottom: 15px; font-size: 26px; border-bottom: 2px solid var(--color-border); padding-bottom: 12px; text-shadow:2px 2px 4px #000;">이벤트 제목</h2>
-            <p id="event-text" style="font-size: 18px; line-height: 1.8; color: var(--color-text-main); word-break: keep-all; margin: 0; text-shadow:1px 1px 2px #000;">이벤트 텍스트가 여기에 표시됩니다.</p>
+            <p id="event-text" style="font-size: 18px; line-height: 1.8; color: var(--color-text-main); word-break: keep-all; margin: 0; text-shadow:1px 1px 2px #000; overflow-wrap: break-word;">이벤트 텍스트가 여기에 표시됩니다.</p>
         </div>
     </div>
 
@@ -690,16 +792,12 @@
                 <div id="static-layer" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:12;"></div>
                 <div id="entity-layer" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:15;"></div>
                 <div id="vfx-layer" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:100;"></div>
-                
-                <!-- 🃏 카드 뽑기 연출 오버레이 -->
-                <div id="card-draw-overlay" style="display:none;">
-                    <div id="card-draw-title" style="color:var(--color-text-main); font-size:14px; font-weight:bold; margin-bottom:12px; text-shadow: 0 2px 4px #000; text-align:center;">
-                        보정 카드 뽑기
-                    </div>
-                    <div id="revealed-cards-container" style="display:flex; gap:15px; justify-content:center; align-items:center; min-height:150px;">
-                        <!-- JS 동적 렌더링 -->
-                    </div>
+            </div><div id="card-draw-overlay" style="display:none;">
+                <div id="card-draw-title" style="color:var(--color-text-main); font-size:14px; font-weight:bold; margin-bottom:12px; text-shadow: 0 2px 4px #000; text-align:center;">
+                    보정 카드 뽑기
                 </div>
+                <div id="revealed-cards-container" style="display:flex; gap:15px; justify-content:center; align-items:center; min-height:150px;">
+                    </div>
             </div>
         </div>
 
@@ -773,7 +871,327 @@
     </div>
 </div>
 
+<script type="module">
+        // 1. 기존 앱/애널리틱스에 추가로 '데이터베이스(Realtime Database)' 부품을 가져옵니다.
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-analytics.js";
+        import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-database.js";
+
+        // 2. 님의 파이어베이스 환경 설정
+        const firebaseConfig = {
+            apiKey: "AIzaSyArPeNoLr31LBjjH3RG2VpA1S4eP-VqvbY",
+            authDomain: "youmustrespectjungyoonjae.firebaseapp.com",
+            projectId: "youmustrespectjungyoonjae",
+            storageBucket: "youmustrespectjungyoonjae.firebasestorage.app",
+            messagingSenderId: "558843606770",
+            appId: "1:558843606770:web:8fb30da3e774c622aa826b",
+            measurementId: "G-8GE9K4JE42",
+            // 🚨 [핵심 추가] 실시간 데이터베이스 주소입니다! (프로젝트 ID 기반으로 자동 생성되는 기본 주소입니다)
+            databaseURL: "https://youmustrespectjungyoonjae-default-rtdb.asia-southeast1.firebasedatabase.app"
+        };
+
+        // 3. 파이어베이스 시동 걸기
+        const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app);
+        const db = getDatabase(app);
+
+        // 4. [매우 중요] 이 'module' 스크립트 밖의 원래 게임 코드에서도 파이어베이스를 조종할 수 있게 전역(window)으로 빼줍니다.
+        window.firebaseDB = db;
+        window.dbRef = ref;
+        window.dbSet = set;
+        window.dbOnValue = onValue;
+        window.dbUpdate = update;
+
+        console.log("🔥 파이어베이스 실시간 통신망 연결 완료!");
+    </script>
+
 <script>
+    // ========================================================
+    // 🌐 실시간 멀티플레이 로비 엔진 (Firebase 연동)
+    // ========================================================
+    
+    // 1. 내 플레이어 고유 ID 생성 (접속할 때마다 랜덤 부여)
+    const myPlayerId = "P_" + Math.floor(Math.random() * 9999).toString().padStart(4, '0');
+    let myRoomCode = null;
+    let isHost = false;
+    let myClass = null;
+    let gameMode = 'single'; 
+
+    // 화면 전환 헬퍼
+    function showMenu(menuId) {
+        ['mode-selection-area', 'multi-menu-area', 'lobby-area'].forEach(id => {
+            document.getElementById(id).style.display = 'none';
+        });
+        document.getElementById(menuId).style.display = 'block';
+    }
+
+    // [싱글 플레이 시작] (서버 통신 없이 즉시 시작)
+    function startSinglePlayer() {
+        gameMode = 'single';
+        selectedClasses = ["야만인"]; 
+
+        // 1. 모드 선택창을 즉시 닫습니다.
+        document.getElementById('intro-layout').style.display = 'none';
+
+        // 2. 이벤트를 먼저 띄우고, 유저가 이벤트 '확인/닫기'를 누르는 시점에 지도를 보여줍니다!
+        triggerRandomEvent('start', () => { 
+            switchLayout('world-map-layout');
+            renderScenarioPins(); 
+        });
+    }
+
+    // [방 생성]
+    function createRoom() {
+        const code = Math.random().toString(36).substring(2, 6).toUpperCase(); 
+        myRoomCode = code;
+        isHost = true;
+        gameMode = 'multi';
+        
+        const roomRef = window.dbRef(window.firebaseDB, `rooms/${code}`);
+        window.dbSet(roomRef, {
+            status: 'waiting',
+            hostId: myPlayerId,
+            players: {
+                [myPlayerId]: { name: `용병 ${myPlayerId.split('_')[1]}`, class: '선택 중...' }
+            }
+        }).then(() => {
+            enterLobby(code);
+        }).catch((error) => {
+            // 🚨 만약 방 만들기가 안 된다면 여기에 실시간으로 경고창이 뜹니다.
+            console.error("Firebase Error:", error);
+            alert("⚠️ 방 생성 실패!\n파이어베이스 홈페이지 콘솔의 Realtime Database 메뉴로 들어가서 [규칙(Rules)] 탭의 내역이 true(테스트 모드)로 허용되어 있는지 확인해 보세요!\n\n에러 메시지: " + error.message);
+        });
+    }
+
+    // [방 참가]
+    function joinRoom() {
+        const code = document.getElementById('join-room-code').value.toUpperCase();
+        if(code.length !== 4) return alert("4자리 방 코드를 정확히 입력하세요!");
+
+        // 방이 존재하는지 확인하지 않고, 일단 플레이어 명단에 내 정보를 밀어넣기(Update) 시도
+        const playersRef = window.dbRef(window.firebaseDB, `rooms/${code}/players`);
+        window.dbUpdate(playersRef, {
+            [myPlayerId]: { name: `용병 ${myPlayerId.split('_')[1]}`, class: '선택 중...' }
+        }).then(() => {
+            myRoomCode = code;
+            isHost = false;
+            gameMode = 'multi';
+            enterLobby(code);
+        }).catch(() => alert("존재하지 않거나 닫힌 방입니다. 코드를 다시 확인하세요."));
+    }
+
+    // [대기실 렌더링 및 실시간 감지]
+    function enterLobby(code) {
+        showMenu('lobby-area');
+        document.getElementById('display-room-code').innerText = code;
+        if (isHost) {
+            document.getElementById('btn-start-multi').style.display = 'inline-block';
+        } else {
+            const editorBtn = document.getElementById('btn-toggle-editor');
+            if (editorBtn) editorBtn.style.display = 'none';
+        }
+
+        renderLobbyClassSelection(); 
+
+        const roomRef = window.dbRef(window.firebaseDB, `rooms/${code}`);
+        window.dbOnValue(roomRef, (snapshot) => {
+            const data = snapshot.val();
+            if(!data) return; 
+            window.currentRoomData = data;
+
+            updateLobbyPlayersUI(data.players);
+            if (data.status === 'playing') {
+                updatePinSuggestions(data.suggestions);
+            }
+
+            if (data.event) {
+                if (data.event.active) {
+                    renderMultiplayerEvent(data.event);
+                } 
+                // 투표가 종료되고 승리한 선택지가 발표되었다면?
+                else if (data.event.winner !== undefined && !window.eventResolved) {
+                    window.eventResolved = true; 
+                    window.currentActiveEventTitle = null; 
+                    const winningChoice = data.event.choices[data.event.winner];
+                    
+                    setTimeout(() => {
+                        // 1. 보상 적용
+                        if (winningChoice.gold !== undefined || (winningChoice.unlocks && winningChoice.unlocks.length > 0)) {
+                            applyEventResult(winningChoice);
+                        }
+
+                        // 2. 연속 이벤트 확인 및 연결
+                        if (winningChoice.nextEvent) {
+                            if (isHost) {
+                                window.dbUpdate(window.dbRef(window.firebaseDB, `rooms/${code}/event`), {
+                                    active: true,
+                                    title: winningChoice.nextEvent.title || data.event.title, 
+                                    desc: winningChoice.nextEvent.text,
+                                    image: winningChoice.nextEvent.image || data.event.image || "", 
+                                    choices: winningChoice.nextEvent.choices,
+                                    votes: {},
+                                    winner: null 
+                                });
+                            }
+                            window.eventResolved = false; 
+                        } else {
+                            // 💡 3. 이벤트가 완전히 끝나면, 다같이 목적지로 이동!
+                            if (data.targetScenario) {
+                                if (data.targetScenario === 'shop') {
+                                    openShopModal();
+                                } else {
+                                    actualStartScenario(data.targetScenario);
+                                }
+                                
+                                // 다 들어갔으니 방장이 서버에 적힌 목적지를 깨끗하게 지웁니다.
+                                if (isHost) {
+                                    window.dbUpdate(window.dbRef(window.firebaseDB, `rooms/${code}`), {
+                                        targetScenario: null
+                                    });
+                                }
+                            } else if (window.pendingEventCallback) {
+                                window.pendingEventCallback(); 
+                                window.pendingEventCallback = null;
+                            }
+                        }
+                    }, 500);
+                }
+            }
+
+            // 💡 최초 게임 시작 시 이벤트 띄우기 (무한 반복 방지를 위해 gameHasStarted 체크 추가)
+            if (data.status === 'playing' && !window.gameHasStarted) {
+                window.gameHasStarted = true; 
+                document.getElementById('intro-layout').style.display = 'none';
+                triggerRandomEvent('start', () => { 
+                    switchLayout('world-map-layout');
+                    renderScenarioPins(); 
+                });
+            }
+        });
+    }
+
+    // 대기실에 있는 유저들 상태 UI 그리기
+    function updateLobbyPlayersUI(players) {
+        const container = document.getElementById('lobby-players');
+        container.innerHTML = '';
+        
+        let allReady = true;
+        let playerCount = 0;
+
+        Object.keys(players).forEach(pId => {
+            playerCount++;
+            const pInfo = players[pId];
+            if (pInfo.class === '선택 중...') allReady = false;
+
+            const box = document.createElement('div');
+            box.style.padding = '10px'; box.style.background = '#1a1412';
+            box.style.border = `2px solid ${pId === myPlayerId ? 'var(--color-text-highlight)' : 'var(--color-border)'}`;
+            box.style.borderRadius = '4px'; box.style.width = '100px';
+
+            const icon = pInfo.class !== '선택 중...' && HERO_TEMPLATES[pInfo.class] ? HERO_TEMPLATES[pInfo.class].icon : '❓';
+            box.innerHTML = `
+                <div style="font-size:24px; margin-bottom:5px;">${icon}</div>
+                <div style="font-size:12px; color:#a1887f;">${pInfo.name}</div>
+                <div style="font-size:14px; font-weight:bold; color:${pInfo.class === '선택 중...' ? '#e57373' : '#81c784'}">${pInfo.class}</div>
+            `;
+            container.appendChild(box);
+        });
+
+        document.getElementById('lobby-status').innerText = `접속 인원: ${playerCount}/3 명 (모두 직업을 골라야 시작할 수 있습니다)`;
+        
+        // 방장 전용 시작 버튼 활성화 로직
+        if (isHost) {
+            document.getElementById('btn-start-multi').disabled = !(allReady && playerCount >= 1);
+            if (document.getElementById('btn-start-multi').disabled) {
+                document.getElementById('btn-start-multi').style.opacity = '0.5';
+            } else {
+                document.getElementById('btn-start-multi').style.opacity = '1';
+            }
+        }
+    }
+
+    // 내 직업 선택 버튼들 렌더링 & 파이어베이스 서버로 전송
+    function renderLobbyClassSelection() {
+        const container = document.getElementById('lobby-class-container');
+        container.innerHTML = '';
+        
+        Object.keys(HERO_TEMPLATES).forEach(cls => {
+            const btn = document.createElement('button');
+            btn.className = 'palette-btn';
+            btn.style.width = '80px'; btn.style.height = '80px';
+            btn.style.display = 'flex'; btn.style.flexDirection = 'column'; btn.style.alignItems = 'center'; btn.style.justifyContent = 'center';
+            
+            btn.innerHTML = `<div style="font-size:24px;">${HERO_TEMPLATES[cls].icon}</div><div style="font-weight:bold; font-size:12px; margin-top:5px;">${cls}</div>`;
+            
+            btn.onclick = () => {
+                myClass = cls;
+                // 📡 내 직업이 바뀌었다고 파이어베이스 서버에 업데이트 요청!
+                const myPlayerRef = window.dbRef(window.firebaseDB, `rooms/${myRoomCode}/players/${myPlayerId}`);
+                window.dbUpdate(myPlayerRef, { class: cls });
+            };
+            container.appendChild(btn);
+        });
+    }
+
+    // [방장 전용] 게임 시작 신호 쏘기
+    function hostStartGame() {
+        const roomRef = window.dbRef(window.firebaseDB, `rooms/${myRoomCode}`);
+        window.dbUpdate(roomRef, { status: 'playing' });
+    }
+    function updatePinSuggestions(suggestions) {
+        // 1. 기존에 그려진 핑 배지 모두 지우기
+        document.querySelectorAll('.suggest-badge-container').forEach(el => el.remove());
+
+        if (!suggestions || !window.currentRoomData) return;
+
+        const hostId = window.currentRoomData.hostId;
+        // 방장을 제외한 나머지 플레이어들을 정렬하여 2번, 3번 순번 자동 부여
+        const others = Object.keys(window.currentRoomData.players).filter(id => id !== hostId).sort();
+        
+        // 2. 핀별로 투표(핑)를 모으기
+        let pinVotes = {}; 
+        Object.keys(suggestions).forEach(pId => {
+            const target = suggestions[pId];
+            if (!pinVotes[target]) pinVotes[target] = [];
+            pinVotes[target].push(pId);
+        });
+
+        // 3. 핀 위에 예쁜 동그라미 번호 달아주기
+        Object.keys(pinVotes).forEach(target => {
+            const pin = document.getElementById('pin-' + target);
+            if (!pin) return;
+
+            const badgeContainer = document.createElement('div');
+            badgeContainer.className = 'suggest-badge-container';
+            badgeContainer.style.position = 'absolute';
+            badgeContainer.style.top = '-25px'; // 핀 꼭대기 위쪽에 배치
+            badgeContainer.style.display = 'flex';
+            badgeContainer.style.gap = '4px';
+            badgeContainer.style.pointerEvents = 'none';
+
+            pinVotes[target].forEach(pId => {
+                let pNum = pId === hostId ? 1 : others.indexOf(pId) + 2;
+                
+                const badge = document.createElement('div');
+                badge.innerText = pNum; // 동그라미 안의 숫자
+                badge.style.width = '20px';
+                badge.style.height = '20px';
+                badge.style.borderRadius = '50%';
+                badge.style.backgroundColor = '#1a1412';
+                badge.style.color = '#c8a165';
+                badge.style.border = '2px solid #c8a165';
+                badge.style.display = 'flex';
+                badge.style.justifyContent = 'center';
+                badge.style.alignItems = 'center';
+                badge.style.fontSize = '12px';
+                badge.style.fontWeight = '900';
+                badge.style.boxShadow = '0 2px 5px rgba(0,0,0,0.8)';
+                badgeContainer.appendChild(badge);
+            });
+
+            pin.appendChild(badgeContainer);
+        });
+    }
     // --- 화면 (레이아웃) 전환 함수 ---
     function switchLayout(layoutId) {
         // 1. 모든 레이아웃 ID를 배열에 담습니다.
@@ -809,6 +1227,8 @@
             }
         }
     }
+    
+    
 
     // --- 시스템 전역 상태 ---
     let playerGold = 0;
@@ -826,11 +1246,12 @@
     const EVENT_POOLS = {
         start: [
             {
-                title: "여정의 시작",
-                image: "", 
-                text: "모험을 시작하기 위해 채비를 마쳤습니다. 길가에서 누군가 흘린 듯한 작은 주머니를 발견했습니다.",
+                title: "불온한 존재",
+                image: "https://itimg.kr/5341/dragon.webp", 
+                text: "돌아왔군, 역시 실패했나.",
                 choices: [
-                    { text: "주머니를 챙긴다 (+20 골드)", gold: 20, unlocks: [] },
+                    { text: "그게 무슨 소리죠?", nextEvent : { text: "닥쳐애미없는새끼야.", choices: [ {text: "씨발."} ]}
+                     },
                     { text: "무시하고 길 떠난다 (+0 골드)", gold: 0, unlocks: [] }
                 ]
             },
@@ -916,42 +1337,299 @@
         ]
     };
 
-    function triggerRandomEvent(poolType, callback) {
-        const pool = EVENT_POOLS[poolType];
-        if (!pool || pool.length === 0) {
-            if (callback) callback();
-            return;
-        }
+    function triggerRandomEvent(type, callback) {
+    window.pendingEventCallback = callback;
+    window.eventResolved = false; 
+    
+    const pool = EVENT_POOLS[type];
+    const evt = type === 'start' ? pool[0] : pool[Math.floor(Math.random() * pool.length)];
+    
+    if (gameMode === 'single') {
+        switchLayout('event-layout');
+        renderEventNode(evt, callback); 
+    } else if (isHost) {
+        window.dbUpdate(window.dbRef(window.firebaseDB, `rooms/${myRoomCode}/event`), {
+            active: true,
+            title: evt.title,
+            desc: evt.text, 
+            image: evt.image || "",
+            choices: evt.choices,
+            votes: {},
+            winner: null // 💡 추가: 새 이벤트가 뜰 때마다 이전 투표 승자 기록을 완전히 비워줍니다.
+        });
+    }
+}
+    function renderSingleEvent(evt) {
+        switchLayout('event-layout');
+        document.getElementById('event-title').innerText = evt.title;
+        document.getElementById('event-desc').innerText = evt.desc;
+        const container = document.getElementById('event-choices');
+        container.innerHTML = '';
+        evt.choices.forEach((choice, idx) => {
+            const btn = document.createElement('button');
+            btn.className = 'btn-event-choice';
+            btn.innerHTML = `<strong>${choice.text}</strong><br><span style="font-size:14px; color:#888;">${choice.result}</span>`;
+            btn.onclick = () => {
+                // (나중에 골드/경험치 적용 로직 추가)
+                if (window.pendingEventCallback) { window.pendingEventCallback(); window.pendingEventCallback = null; }
+            };
+            container.appendChild(btn);
+        });
+    }
+    function renderMultiplayerEvent(eventData) {
+    switchLayout('event-layout');
+    
+    const choicesContainer = document.getElementById('event-choices');
+    const textEl = document.getElementById('event-text');
+    
+    // 💡 1. 핵심 수정: 현재 렌더링된 이벤트인지 확인 (투표수 갱신으로 인한 애니메이션 재실행 방지)
+    const isSameEvent = (window.currentActiveEventTitle === eventData.title);
 
-        const event = pool[Math.floor(Math.random() * pool.length)];
-
+    if (!isSameEvent) {
+        window.currentActiveEventTitle = eventData.title; // 현재 이벤트 제목 기억
+        document.getElementById('event-title').innerText = eventData.title;
+        
+        // 이미지 처리
         const imgEl = document.getElementById('event-image');
-        if (event.image && event.image.trim() !== "") {
-            imgEl.src = event.image;
+        if (eventData.image && eventData.image.trim() !== "") {
+            imgEl.src = eventData.image;
         } else {
             imgEl.src = 'data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%22800%22%20height%3D%22400%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Crect%20width%3D%22100%25%22%20height%3D%22100%25%22%20fill%3D%22%231a1412%22%2F%3E%3Ctext%20x%3D%2250%25%22%20y%3D%2250%25%22%20fill%3D%22%234a3b32%22%20font-size%3D%2224%22%20font-family%3D%22serif%22%20text-anchor%3D%22middle%22%20dy%3D%22.3em%22%3EImage%20Placeholder%3C%2Ftext%3E%3C%2Fsvg%3E';
         }
 
-        document.getElementById('event-title').innerText = event.title;
-        document.getElementById('event-text').innerHTML = event.text;
-        
-        const choicesContainer = document.getElementById('event-choices');
-        choicesContainer.innerHTML = '';
+        // 텍스트 타자기 연출 세팅
+        textEl.innerHTML = '';
+        choicesContainer.style.transition = 'none'; 
+        choicesContainer.style.opacity = '0';
+        choicesContainer.style.pointerEvents = 'none'; 
 
-        event.choices.forEach(choice => {
+        if (window.skipEventAnimation) {
+            document.removeEventListener('mousedown', window.skipEventAnimation);
+            clearTimeout(window.typeWriterTimeout);
+        }
+
+        let htmlStr = "";
+        let charDelay = 0.035; 
+        let isTag = false;
+        let tagBuffer = "";
+        let spanCount = 0;
+        
+        const descText = eventData.desc || "";
+        for (let i = 0; i < descText.length; i++) {
+            let char = descText[i];
+            if (char === '<') { isTag = true; tagBuffer += char; continue; }
+            if (char === '>') { isTag = false; tagBuffer += char; htmlStr += tagBuffer; tagBuffer = ""; continue; }
+            if (isTag) { tagBuffer += char; continue; }
+            
+            if (char === ' ') {
+                htmlStr += `<span style="opacity:0; animation: fadeChar 0.4s forwards ${spanCount * charDelay}s;">&nbsp;</span>`;
+            } else {
+                htmlStr += `<span style="opacity:0; animation: fadeChar 0.4s forwards ${spanCount * charDelay}s;">${char}</span>`;
+            }
+            spanCount++;
+        }
+        
+        textEl.innerHTML = htmlStr;
+
+        // 스킵 기능 설정
+        let isSkipped = false;
+        window.skipEventAnimation = () => {
+            if (isSkipped) return;
+            isSkipped = true;
+            clearTimeout(window.typeWriterTimeout);
+            
+            const spans = textEl.querySelectorAll('span');
+            spans.forEach(s => {
+                s.style.animation = 'none'; 
+                s.style.opacity = '1';      
+            });
+            
+            choicesContainer.style.transition = 'opacity 0.6s ease';
+            requestAnimationFrame(() => {
+                choicesContainer.style.opacity = '1';
+            });
+            choicesContainer.style.pointerEvents = 'auto'; 
+            document.removeEventListener('mousedown', window.skipEventAnimation);
+        };
+
+        window.typeWriterTimeout = setTimeout(() => {
+            window.skipEventAnimation();
+        }, spanCount * charDelay * 1000 + 300);
+
+        setTimeout(() => {
+            if (!isSkipped) document.addEventListener('mousedown', window.skipEventAnimation);
+        }, 100);
+    } else {
+        // 💡 이미 렌더링된 이벤트의 투표 갱신인 경우, 버튼 컨테이너를 보이게 유지
+        choicesContainer.style.opacity = '1';
+        choicesContainer.style.pointerEvents = 'auto';
+    }
+
+    // 💡 2. 투표 선택지 렌더링 (이 부분은 투표수가 바뀌므로 매번 갱신)
+    choicesContainer.innerHTML = '';
+    const votes = eventData.votes || {};
+    let totalVotes = Object.keys(votes).length;
+    let totalPlayers = Object.keys(window.currentRoomData.players).length;
+
+    eventData.choices.forEach((choice, idx) => {
+        let voteCount = 0;
+        Object.keys(votes).forEach(pId => {
+            if(votes[pId] === idx) voteCount++;
+        });
+
+        const btn = document.createElement('button');
+        btn.className = 'btn-event-choice';
+        if(votes[myPlayerId] === idx) btn.style.borderColor = 'var(--color-text-highlight)';
+        
+        btn.style.display = 'flex';
+        btn.style.justifyContent = 'space-between';
+        btn.style.alignItems = 'center';
+        
+        btn.innerHTML = `
+            <div>${choice.text}</div>
+            <div style="background: #110d0a; padding: 4px 12px; border-radius: 12px; font-size: 18px; color: ${voteCount > 0 ? 'var(--color-text-highlight)' : '#555'}; border: 1px solid ${voteCount > 0 ? 'var(--color-text-highlight)' : '#333'};">
+                ${voteCount}
+            </div>
+        `;
+        
+        btn.onclick = (e) => {
+            e.stopPropagation(); 
+            window.dbUpdate(window.dbRef(window.firebaseDB, `rooms/${myRoomCode}/event/votes`), {
+                [myPlayerId]: idx
+            });
+        };
+        choicesContainer.appendChild(btn);
+    });
+
+    if (isHost) {
+        const hostBtn = document.createElement('button');
+        hostBtn.className = 'btn-danger';
+        hostBtn.style.marginTop = '25px';
+        hostBtn.style.padding = '12px 30px';
+        hostBtn.innerText = `투표 결과 확정 (${totalVotes}/${totalPlayers})`;
+        hostBtn.disabled = totalVotes === 0; 
+        
+        hostBtn.onclick = (e) => {
+            e.stopPropagation();
+            let counts = {};
+            Object.values(votes).forEach(v => counts[v] = (counts[v] || 0) + 1);
+            let maxVotes = 0; let winningIdx = 0;
+            Object.keys(counts).forEach(idx => {
+                if(counts[idx] > maxVotes) { maxVotes = counts[idx]; winningIdx = idx; }
+            });
+
+            window.dbUpdate(window.dbRef(window.firebaseDB, `rooms/${myRoomCode}/event`), {
+                active: false,
+                winner: winningIdx
+            });
+        };
+        choicesContainer.appendChild(hostBtn);
+    }
+}
+    
+    // 전역 변수: 타이핑 연출 제어 및 스킵용
+    let typeWriterTimeout;
+    let skipEventAnimation = null; 
+
+    // 💡 개별 이벤트 노드를 화면에 그리고 타자기 연출을 세팅하는 함수
+    function renderEventNode(eventNode, callback) {
+        if (eventNode.image !== undefined) {
+            const imgEl = document.getElementById('event-image');
+            if (eventNode.image.trim() !== "") imgEl.src = eventNode.image;
+            else imgEl.src = 'data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%22800%22%20height%3D%22400%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Crect%20width%3D%22100%25%22%20height%3D%22100%25%22%20fill%3D%22%231a1412%22%2F%3E%3Ctext%20x%3D%2250%25%22%20y%3D%2250%25%22%20fill%3D%22%234a3b32%22%20font-size%3D%2224%22%20font-family%3D%22serif%22%20text-anchor%3D%22middle%22%20dy%3D%22.3em%22%3EImage%20Placeholder%3C%2Ftext%3E%3C%2Fsvg%3E';
+        }
+
+        if (eventNode.title) {
+            document.getElementById('event-title').innerText = eventNode.title;
+        }
+
+        const textEl = document.getElementById('event-text');
+        const choicesContainer = document.getElementById('event-choices');
+        
+        // 1. 초기화 및 선택지 숨기기
+        textEl.innerHTML = '';
+        choicesContainer.innerHTML = ''; 
+        // 🔥 버그 수정: 다음 선택지로 넘어갈 때 잔상이 보이지 않도록 애니메이션을 즉시 끄고 0초 만에 투명화
+        choicesContainer.style.transition = 'none'; 
+        choicesContainer.style.opacity = '0';
+        choicesContainer.style.pointerEvents = 'none'; 
+
+        if (skipEventAnimation) {
+            document.removeEventListener('mousedown', skipEventAnimation);
+            clearTimeout(typeWriterTimeout);
+        }
+
+        // 2. 텍스트를 한 글자씩 분리하여 애니메이션 span 태그로 감싸기
+        let htmlStr = "";
+        let charDelay = 0.035; 
+        let isTag = false;
+        let tagBuffer = "";
+        let spanCount = 0;
+        
+        for (let i = 0; i < eventNode.text.length; i++) {
+            let char = eventNode.text[i];
+            if (char === '<') { isTag = true; tagBuffer += char; continue; }
+            if (char === '>') { isTag = false; tagBuffer += char; htmlStr += tagBuffer; tagBuffer = ""; continue; }
+            if (isTag) { tagBuffer += char; continue; }
+            
+            if (char === ' ') {
+                htmlStr += `<span style="opacity:0; animation: fadeChar 0.4s forwards ${spanCount * charDelay}s;">&nbsp;</span>`;
+            } else {
+                htmlStr += `<span style="opacity:0; animation: fadeChar 0.4s forwards ${spanCount * charDelay}s;">${char}</span>`;
+            }
+            spanCount++;
+        }
+        
+        textEl.innerHTML = htmlStr;
+
+        // 3. 버튼 세팅
+        eventNode.choices.forEach(choice => {
             const btn = document.createElement('button');
             btn.className = 'btn-event-choice';
             btn.innerHTML = choice.text; 
-            btn.onclick = () => {
-                applyEventResult(choice);
-                if (callback) callback();
+            btn.onclick = (e) => {
+                e.stopPropagation(); 
+                if (choice.gold !== undefined || (choice.unlocks && choice.unlocks.length > 0)) {
+                    applyEventResult(choice);
+                }
+                if (choice.nextEvent) renderEventNode(choice.nextEvent, callback);
+                else if (callback) callback();
             };
             choicesContainer.appendChild(btn);
         });
 
-        switchLayout('event-layout');
+        // 4. 스킵 로직
+        let isSkipped = false;
+        skipEventAnimation = () => {
+            if (isSkipped) return;
+            isSkipped = true;
+            clearTimeout(typeWriterTimeout);
+            
+            const spans = textEl.querySelectorAll('span');
+            spans.forEach(s => {
+                s.style.animation = 'none'; 
+                s.style.opacity = '1';      
+            });
+            
+            // 🔥 버튼이 나타날 때만 부드러운 페이드인 애니메이션을 다시 켜줍니다.
+            choicesContainer.style.transition = 'opacity 0.6s ease';
+            requestAnimationFrame(() => {
+                choicesContainer.style.opacity = '1';
+            });
+            choicesContainer.style.pointerEvents = 'auto'; 
+            document.removeEventListener('mousedown', skipEventAnimation);
+        };
+
+        typeWriterTimeout = setTimeout(() => {
+            skipEventAnimation();
+        }, spanCount * charDelay * 1000 + 300);
+
+        setTimeout(() => {
+            if (!isSkipped) document.addEventListener('mousedown', skipEventAnimation);
+        }, 100);
     }
 
+    // 💡 보상 처리 함수
     function applyEventResult(choice) {
         if (choice.gold !== undefined) {
             playerGold += choice.gold;
@@ -1351,7 +2029,46 @@
         return div;
     }
 
-    // --- 몬스터 템플릿 및 덱 클래스 ---
+    // @@@@@@@@@@@@@@@@@@@@@@ 몬스터 정보,카드 / 영웅 정보, 카드 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+    const HERO_TEMPLATES = {
+        "야만인": { name: "야만인", icon: "🪓", image: "https://itimg.kr/5341/brute.jpg", hp: 12 },
+        "주문술사": { name: "주문술사", icon: "🧙‍♀️", image: "https://itimg.kr/5341/mage.webp", hp: 6 },
+        "도적": { name: "도적", icon: "🗡️", image: "", hp: 8 },
+        "땜장이": { name: "땜장이", icon: "⚙️", image: "", hp: 9 }
+    };
+
+    // 💡 직업별 카드 덱
+    const HERO_DECKS = {
+        "야만인": [
+            { id:"g1", init: 15, name:"방패 돌진", top:{type:"attack", val:5, r:1, pierce:1}, bot:{type:"move", val:3}},
+            { id:"g2", init: 60, name:"철벽의 진", top:{type:"shield", val:2, conditionSelf:"strengthen"}, bot:{type:"move", val:2} },
+            { id:"g3", init: 25, name:"심판의 일격", top:{type:"attack", val:12, r:2, condition:"stun"}, bot:{type:"attack", val:8, r:1, condition:"immobilize"} },
+            { id:"g4", init: 85, name:"회복의 오라", top:{type:"heal", val:15}, bot:{type:"jump", val:4} }
+        ],
+        "주문술사": [
+            { id:"m1", init: 20, name:"화염구", top:{type:"attack", val:3, r:3, condition:"wound"}, bot:{type:"move", val:2} },
+            { id:"m2", init: 75, name:"치유의 빛", top:{type:"heal", val:12}, bot:{type:"move", val:3} },
+            { id:"m3", init: 12, name:"공간 이동", top:{type:"attack", val:10, r:2, pierce:2}, bot:{type:"teleport", val:4} },
+            { id:"m4", init: 55, name:"마력 방패", top:{type:"shield", val:1, conditionSelf:"invisible"}, bot:{type:"heal", val:10}},
+            { id:"m5", init: 32, name:"에테르 주입", top:{type:"attack", val:12, r:2, infuse:"Fire"}, bot:{type:"move", val:3} },
+            { id:"m6", init: 68, name:"화염 작열", top:{type:"attack", val:14, r:3, consume:"Fire", consumeBonus:{val:8, condition:"wound"}}, bot:{type:"move", val:2} },
+            { id:"m7", init: 30, name:"연쇄 번개", top:{type:"attack", val: 3, r: 3, target: 3}, bot:{type:"move", val:2} },
+            { id:"m8", init: 45, name:"얼음 격동", top:{type:"attack", val: 2, r: 2, aoe: [[0,0], [1,0], [0,1], [-1,1]]}, bot:{type:"move", val:3} }
+        ],
+        "도적": [
+            { id:"s1", init: 10, name:"기습 찌르기", top:{type:"attack", val:4, pierce:2}, bot:{type:"move", val:4} },
+            { id:"s2", init: 85, name:"연막술", top:{type:"attack", val:2, conditionSelf:"invisible"}, bot:{type:"move", val:2, conditionSelf:"invisible"} },
+            { id:"s3", init: 18, name:"독 묻은 칼", top:{type:"attack", val:3, condition:"poison"}, bot:{type:"move", val:3} },
+            { id:"s4", init: 35, name:"치명적 일격", top:{type:"attack", val:6}, bot:{type:"move", val:3} }
+        ],
+        "땜장이": [
+            { id:"t1", init: 25, name:"독성 플라스크", top:{type:"attack", val:2, r:3, aoe:[[0,0],[1,0]], condition:"poison"}, bot:{type:"move", val:3} },
+            { id:"t2", init: 70, name:"응급 처치", top:{type:"heal", val:15}, bot:{type:"move", val:2} },
+            { id:"t3", init: 15, name:"화염 방사기", top:{type:"attack", val:3, r:1, aoe:[[0,0],[1,0],[-1,1]]}, bot:{type:"move", val:4} },
+            { id:"t4", init: 40, name:"마비 다트", top:{type:"attack", val:2, r:3, condition:"stun"}, bot:{type:"move", val:3} }
+        ]
+    };
+
     const MONSTER_TEMPLATES = {
         "m_skel": { 
             name: "살아있는 뼈", deckClass: "언데드", icon: "💀", image: "https://itimg.kr/5341/sans.jpg", 
@@ -1386,7 +2103,7 @@
             { name: "강타", init: 35, moveMod: 0, atkMod: 2, shield: 0 }
         ],
         "궁수": [
-            { name: "저격", init: 90, moveMod: -99, atkMod: 1, rangeMod: 1, condition: "poison" },
+            { name: "저격", init: 90, moveMod: -99, atkMod: 1, rangeMod: 1, condition: "immobilize", shuffle: true },
             { name: "치고 빠지기", init: 40, moveMod: 1, atkMod: -1, rangeMod: 0 },
             { name: "일제 사격", init: 60, moveMod: 0, atkMod: 0, rangeMod: 0 },
             { name: "매복 덫", init: 25, moveMod: -1, atkMod: -1, rangeMod: 0, createTrap: 5 }
@@ -1398,29 +2115,12 @@
         ]
     };
 
-    const HERO_DECKS = {
-        "야만인": [
-            { id:"g1", init: 15, name:"방패 돌진", top:{type:"attack", val:5, r:1, pierce:1, desc:"근접 공격 15 (관통 1)"}, bot:{type:"move", val:3, desc:"이동 3"} },
-            { id:"g2", init: 60, name:"철벽의 진", top:{type:"shield", val:2, conditionSelf:"strengthen", desc:"방어 2, 자신 강화"}, bot:{type:"move", val:2, desc:"이동 2"} },
-            { id:"g3", init: 25, name:"심판의 일격", top:{type:"attack", val:12, r:2, condition:"stun", desc:"원거리 공격 12 (사거리 2, 기절)"}, bot:{type:"attack", val:8, r:1, condition:"immobilize", desc:"하단 근접 8 (이동불가)"} },
-            { id:"g4", init: 85, name:"회복의 오라", top:{type:"heal", val:15, desc:"체력 15 회복"}, bot:{type:"jump", val:4, desc:"뛰어넘기 4"} }
-        ],
-        "주문술사": [
-            { id:"m1", init: 20, name:"화염구", top:{type:"attack", val:3, r:3, condition:"wound", desc:"공격 3 (사거리 3, 부상)"}, bot:{type:"move", val:2, desc:"이동 2"} },
-            { id:"m2", init: 75, name:"치유의 빛", top:{type:"heal", val:12, desc:"체력 12 회복"}, bot:{type:"move", val:3, desc:"이동 3"} },
-            { id:"m3", init: 12, name:"공간 이동", top:{type:"attack", val:10, r:2, pierce:2, desc:"마력 공격 10 (사거리 2, 관통 2)"}, bot:{type:"teleport", val:5, desc:"순간이동 5"} },
-            { id:"m4", init: 55, name:"마력 방패", top:{type:"shield", val:1, conditionSelf:"invisible", desc:"방어도 1, 자신 투명"}, bot:{type:"heal", val:10, desc:"하단 치유 10"} },
-            { id:"m5", init: 32, name:"에테르 주입", top:{type:"attack", val:12, r:2, infuse:"Fire", desc:`원거리 마력 공격 12 (사거리 2) <br><b style='color:#b71c1c;'>[화염 <img src="https://itimg.kr/5341/fire.webp" style="width:14px;vertical-align:middle;"> 원소 주입]</b>`}, bot:{type:"move", val:3, desc:"이동 3"} },
-            { id:"m6", init: 68, name:"화염 작열", top:{type:"attack", val:14, r:3, consume:"Fire", consumeBonus:{val:8, condition:"wound"}, desc:`폭발성 공격 14 (사거리 3) <br><b style='color:#8e2424;'>[소비 <img src="https://itimg.kr/5341/csfire.png" style="width:14px;vertical-align:middle;">: 공격력+8 및 부상<br><b style='color:#8e2424;'>[<img src="https://itimg.kr/5341/wound.png" style="width:14px;vertical-align:middle;">]</b>`}, bot:{type:"move", val:2, desc:"이동 2"} }
-        ]
-    };
-
     let unlockedScenarios = [1];
     let currentScenarioId = null;
 
     const SCENARIOS = {
         1: {
-            title: "1. 윤재 타운", top: "30%", left: "40%", unlocks: [], 
+            title: "1. 윤재 타운", top: "200px", left: "60%", unlocks: [], 
             mapData: { 
                 cols: 8, rows: 6, heroes: {h1:{c:2,r:1}, h2:{c:1,r:2}}, 
                 monsters: [{type:'m_gob', c:5, r:4}, {type:'m_gob', c:4, r:1}], 
@@ -1447,6 +2147,10 @@
     let party = []; let monsters = []; let obstacles = []; let traps = [];     
     let voidTiles = []; let doors = []; let diffTiles = []; let roomMap = {}; let revealedRooms = new Set();
     
+    let needMonsterReshuffle = false;
+    
+    let monsterDecksState = {};
+    
     let gameState = "PLANNING"; let planningIndex = 0; let planningSelection = []; 
     let turnOrder = []; let currentTurnIdx = 0;
     
@@ -1463,17 +2167,31 @@
 
     function renderScenarioPins() {
         const container = document.getElementById('pins-container');
-        if (!container) { 
-            console.error("핀 컨테이너를 찾을 수 없습니다!");
-            return; }
+        if (!container) return;
         container.innerHTML = '';
         
         if (hasClearedFirstScenario) {
             const basePin = document.createElement('div');
+            basePin.id = 'pin-shop'; // 💡 핀 ID 부여
             basePin.className = 'scenario-pin base-pin'; 
             basePin.style.top = '50%'; basePin.style.left = '50%';
             basePin.onclick = () => {
-                triggerRandomEvent('travel', openShopModal);
+                // 💡 alert 대신 서버에 '상점 가자고 추천(핑)' 남기기
+                if (gameMode === 'multi' && !isHost) {
+                    window.dbUpdate(window.dbRef(window.firebaseDB, `rooms/${myRoomCode}/suggestions`), {
+                        [myPlayerId]: 'shop'
+                    });
+                    return;
+                }
+                if (gameMode === 'multi' && isHost) {
+                    window.dbUpdate(window.dbRef(window.firebaseDB, `rooms/${myRoomCode}`), {
+                        targetScenario: 'shop',
+                        suggestions: null // 이동 결정 시 모여있던 핑 초기화
+                    });
+                }
+                triggerRandomEvent('travel', () => {
+                    if (gameMode === 'single') openShopModal();
+                });
             };
             basePin.innerHTML = `<span class="pin-icon">⛺</span><span class="pin-label">거점 상점</span>`;
             container.appendChild(basePin);
@@ -1483,6 +2201,7 @@
             const scenario = SCENARIOS[id]; 
             if (!scenario) return;
             const pin = document.createElement('div');
+            pin.id = 'pin-' + id; // 💡 핀 ID 부여
             pin.className = 'scenario-pin'; 
             pin.style.top = scenario.top; 
             pin.style.left = scenario.left;
@@ -1490,6 +2209,11 @@
             pin.innerHTML = `<span class="pin-icon">📍</span><span class="pin-label">${scenario.title}</span>`;
             container.appendChild(pin);
         });
+        
+        // 지도가 렌더링될 때 서버에 남아있는 핑이 있다면 다시 그려줌
+        if (window.currentRoomData && window.currentRoomData.suggestions) {
+            updatePinSuggestions(window.currentRoomData.suggestions);
+        }
     }
 
     const HEX_W = 52, HEX_H = 60;
@@ -1974,13 +2698,13 @@
         doors = JSON.parse(JSON.stringify(editMap.doors || [])); doors.forEach(d => d.opened = false);
         diffTiles = JSON.parse(JSON.stringify(editMap.diffTiles || []));
         party = []; monsters = []; obstacles = []; traps = []; monsterModifierDeck = createModifierDeck();
+        monsterDecksState = {};
         
         elements = { Fire: 0, Ice: 0, Wind: 0, Earth: 0, Light: 0, Dark: 0 };
         infusedThisTurn = { Fire: false, Ice: false, Wind: false, Earth: false, Light: false, Dark: false };
         pendingInfusions = [];
         renderElementsUI();
         
-        // 기존의 지저분했던 h1 초기화 코드를 아래처럼 덮어씌워주세요.
         if (editMap.heroes.h1) party.push({ id:"h1", name:"야만인", icon:"🪓", image:"https://itimg.kr/5341/brute.jpg", hp:10, maxHp:10, shield:0, hand:[], discard:[], lost:[], exhausted:false, hasRestedThisRound:false, x:editMap.heroes.h1.c, y:editMap.heroes.h1.r, isHero:true, conditions:{}, modifierDeck:createModifierDeck() });
         if (editMap.heroes.h2) party.push({ id:"h2", name:"주문술사", icon:"🧙‍♀️", image:"https://itimg.kr/5341/mage.webp", hp:6, maxHp:6, shield:0, hand:[], discard:[], lost:[], exhausted:false, hasRestedThisRound:false, x:editMap.heroes.h2.c, y:editMap.heroes.h2.r, isHero:true, conditions:{}, modifierDeck:createModifierDeck() });
         party.forEach(h => { h.hand = JSON.parse(JSON.stringify(HERO_DECKS[h.name])); Object.keys(COND_MAP).forEach(k => h.conditions[k] = 0); h.conditions.poison = false; h.conditions.wound = false; });
@@ -2011,13 +2735,16 @@
             Object.keys(COND_MAP).forEach(k => newM.conditions[k] = 0); newM.conditions.poison = false; newM.conditions.wound = false;
             monsters.push(newM);
         });
-
+         if(window.resetMapView) window.resetMapView();
         obstacles = JSON.parse(JSON.stringify(editMap.obstacles)); traps = JSON.parse(JSON.stringify(editMap.traps));
         generateRooms(); initBoardUI('hex-board', handleHexClick); renderEntitiesOnMap(); startPlanningPhase();
     }
 
     function renderEntities() {
         const pList = document.getElementById('party-list'); pList.innerHTML = '';
+  
+            let hpImg = `<img src="https://itimg.kr/5341/hp.webp" style="width:14px;height:14px;vertical-align:middle; filter: invert(15%) sepia(85%) saturate(3000%) hue-rotate(350deg) brightness(95%) contrast(120%) drop-shadow(1px 1px 1px #000);" alt="HP">`;
+            let shieldImg = `<img src="https://itimg.kr/5341/shield.webp" style="width:14px;height:14px;vertical-align:middle; filter: invert(45%) sepia(60%) saturate(2500%) hue-rotate(185deg) brightness(105%) contrast(110%) drop-shadow(1px 1px 1px #000);" alt="방어">`;
         party.forEach(h => {
             const div = document.createElement('div');
             div.style.backgroundColor = '#221a15'; div.style.backgroundImage = 'var(--bg-noise)'; div.style.padding = '10px'; div.style.marginBottom = '12px'; div.style.borderRadius = '4px'; div.style.border = '1px solid var(--color-border)'; div.style.boxShadow = 'inset 0 0 10px rgba(0,0,0,0.5)';
@@ -2025,8 +2752,7 @@
             
             let cIcons = Object.keys(h.conditions).filter(k => h.conditions[k]).map(k => COND_MAP[k]).join('');
             
-            let hpImg = `<img src="https://itimg.kr/5341/hp.webp" style="width:14px;height:14px;vertical-align:middle; filter:drop-shadow(1px 1px 1px #000);" alt="HP">`;
-            let shieldImg = `<img src="https://itimg.kr/5341/shield.webp" style="width:14px;height:14px;vertical-align:middle; filter:drop-shadow(1px 1px 1px #000);" alt="방어">`;
+            
             let heroVisual = h.icon;
             if (h.image && h.image.trim() !== "") {
                 heroVisual = `<img src="${h.image}" style="width:18px;height:18px;border-radius:50%;object-fit:cover;vertical-align:middle;border:1px solid #4a3b32;">`;
@@ -2037,7 +2763,7 @@
                     <span>${heroVisual} ${h.name}</span> <span style="color:#6d5447;">${shieldImg} ${h.shield}</span>
                 </div>
                 <div class="status-icons-panel">${cIcons}</div>
-                <div style="font-size:12px; margin-bottom:8px; margin-top:4px;">${hpImg} ${h.hp} / ${h.maxHp} <span style="margin-left:10px; color:#8d6e63;">패: ${h.hand.length}장</span></div>
+                <div style="font-size:12px; margin-bottom:8px; margin-top:4px; color:fff;">${hpImg} ${h.hp} / ${h.maxHp} <span style="margin-left:10px; color:#8d6e63;">패: ${h.hand.length}장</span></div>
                 <div style="display:flex; gap:8px;">
                     <button class="big-card-btn btn-discard" onclick="openCardViewer('${h.id}', 'discard')">🗑️ 버림 (${h.discard.length})</button>
                     <button class="big-card-btn btn-lost" onclick="openCardViewer('${h.id}', 'lost')">🔥 소멸 (${h.lost.length})</button>
@@ -2073,9 +2799,9 @@
 
             // 1. 특수 능력 (비행, 관통, 반격) 텍스트/이미지 준비
 let specialAbilities = [];
-if (m.flying) specialAbilities.push(`<img src="https://itimg.kr/5341/flying.webp" style="width:14px; height:14px; vertical-align:middle;" alt="비행" title="비행">`);
+if (m.flying) specialAbilities.push(`<img src="https://itimg.kr/5341/flying.webp" style="width:14px; height:14px; vertical-align:middle;filter:brightness(25);" alt="비행" title="비행">`);
 if (m.pierce > 0) specialAbilities.push(`<img src="https://itimg.kr/5341/pierce.png" style="width:14px; height:14px; vertical-align:middle;" alt="관통" title="관통 ${m.pierce}"> ${m.pierce}`);
-if (m.retaliate > 0) specialAbilities.push(`<img src="https://itimg.kr/5341/retaliate.webp" style="width:14px; height:14px; vertical-align:middle;" alt="반격" title="반격 ${m.retaliate}"> ${m.retaliate}`);
+if (m.retaliate > 0) specialAbilities.push(`<img src="https://itimg.kr/5341/retaliate.webp" style="width:14px; height:14px; vertical-align:middle; filter:brightness(25);" alt="반격" title="반격 ${m.retaliate}"> ${m.retaliate}`);
 let specialsHtml = specialAbilities.length > 0 ? `<div style="font-size:11px; color:#c8a165; margin-top:4px;">특수: ${specialAbilities.join(' | ')}</div>` : '';
 
 // 2. 기본 부여 상태이상 (우측 상단 배치용)
@@ -2092,29 +2818,28 @@ if (m.immunities && m.immunities.length > 0) {
 }
 
 // 4. 공격력, 이동력, 사거리 및 HP/방어 이미지 틀 준비
-let atkHtml = `<img src="https://itimg.kr/5341/attack.webp" style="width:12px;height:12px;vertical-align:middle;" alt="공격"> ${m.atk}`;
-let moveHtml = `<img src="https://itimg.kr/5341/move.webp" style="width:12px;height:12px;vertical-align:middle;" alt="이동"> ${m.move}`;
-let rangeHtml = m.range > 1 ? ` | <img src="https://itimg.kr/5341/range.webp" style="width:12px;height:12px;vertical-align:middle;" alt="사거리"> ${m.range}` : '';
+let atkHtml = `<img src="https://itimg.kr/5341/attack.webp" style="width:12px;height:12px;vertical-align:middle; filter:brightness(25);" alt="공격"> ${m.atk}`;
+let moveHtml = `<img src="https://itimg.kr/5341/move.webp" style="width:12px;height:12px;vertical-align:middle; filter:brightness(25);" alt="이동"> ${m.move}`;
+let rangeHtml = m.range > 1 ? ` | <img src="https://itimg.kr/5341/range.webp" style="width:12px;height:12px;vertical-align:middle; filter:brightness(25);" alt="사거리"> ${m.range}` : '';
 
-let hpImg = `<img src="https://itimg.kr/5341/hp.webp" style="width:14px;height:14px;vertical-align:middle; filter:drop-shadow(1px 1px 1px #000);" alt="HP">`;
-let shieldImg = `<img src="https://itimg.kr/5341/shield.webp" style="width:14px;height:14px;vertical-align:middle; filter:drop-shadow(1px 1px 1px #000);" alt="방어">`;
 
 div.innerHTML = `
-   <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:13px; color:${titleColor};">
-       <span>${monsterVisual} ${m.displayName}</span> <span style="color:#6d5447;">${shieldImg} ${m.shield}</span>
-   </div>
-   <div class="status-icons-panel">${cIcons}</div>
-   <div style="display:flex; justify-content:space-between; align-items:flex-end; font-size:11px; margin-top:4px; color:#bcaaa4;">
-       <div>
-           <div style="margin-bottom:2px;">${hpImg} ${m.hp} / ${m.maxHp}</div>
-           <div>${atkHtml} | ${moveHtml}${rangeHtml}</div>
-       </div>
-       <div style="text-align:right;">
-           ${innateHtml}
-           ${immunitiesHtml}
-       </div>
-   </div>
-   ${specialsHtml}
+    <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:13px; color:${titleColor}; text-shadow: 1px 1px 2px #000;">
+        <span>${monsterVisual} ${m.displayName}</span> 
+        <span style="color:#d4c4b7;">${shieldImg} ${m.shield}</span>
+    </div>
+    <div class="status-icons-panel">${cIcons}</div>
+    <div style="display:flex; justify-content:space-between; align-items:flex-end; font-size:11px; margin-top:4px; color:#d4c4b7; text-shadow: 1px 1px 1px #000;">
+        <div>
+            <div style="margin-bottom:2px; color:#fff;">${hpImg} ${m.hp} / ${m.maxHp}</div>
+            <div style="color:#e0e0e0;">${atkHtml} | ${moveHtml}${rangeHtml}</div>
+        </div>
+        <div style="text-align:right;">
+            ${innateHtml}
+            ${immunitiesHtml}
+        </div>
+    </div>
+    ${specialsHtml}
 `;
 mList.appendChild(div);
         });
@@ -2221,9 +2946,38 @@ mList.appendChild(div);
         monsters.filter(m => m.hp > 0 && m.revealed).forEach(m => {
             let dClass = m.deckClass;
             if(!drawnCards[dClass]) {
-                const deck = MONSTER_DECKS[dClass] || MONSTER_DECKS["언데드"]; 
-                drawnCards[dClass] = deck[Math.floor(Math.random() * deck.length)];
-                let d = drawnCards[dClass]; 
+                // 💡 [수정] 원본 풀에서 직뽑하지 않고, 종족별 실시간 덱 상태를 참조합니다.
+                if (!monsterDecksState[dClass] || !monsterDecksState[dClass].draw || monsterDecksState[dClass].draw.length === 0) {
+                    let originDeck = MONSTER_DECKS[dClass] || MONSTER_DECKS["언데드"];
+                    let copiedCards = JSON.parse(JSON.stringify(originDeck));
+                    // 피셔-예이츠 셔플로 첫 드로우 덱 구성
+                    for (let i = copiedCards.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [copiedCards[i], copiedCards[j]] = [copiedCards[j], copiedCards[i]];
+                    }
+                    monsterDecksState[dClass] = { draw: copiedCards, discard: [] };
+                }
+
+                let mDeck = monsterDecksState[dClass];
+                
+                // 💡 만약 드로우 덱이 비었다면 버림 패를 섞어서 다시 드로우 덱으로 복구 (셔플 카드가 안 나왔더라도 안전장치)
+                if (mDeck.draw.length === 0 && mDeck.discard.length > 0) {
+                    mDeck.draw = [...mDeck.discard];
+                    mDeck.discard = [];
+                    for (let i = mDeck.draw.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [mDeck.draw[i], mDeck.draw[j]] = [mDeck.draw[j], mDeck.draw[i]];
+                    }
+                }
+
+                // 💡 덱에서 카드를 실제로 한 장 꺼내고(pop) 버림 패(discard)에 넣습니다.
+                let d = mDeck.draw.pop();
+                mDeck.discard.push(d);
+                drawnCards[dClass] = d;
+
+                if (d.shuffle) {
+                    needMonsterReshuffle = true;
+                }
                 
                 let formatMod = (val) => val > 0 ? `+${val}` : `${val}`;
                 let desc = "";
@@ -2242,14 +2996,37 @@ mList.appendChild(div);
 
                 desc = desc.replace(/<br>$/, ''); 
 
-                const div = document.createElement('div'); div.style.backgroundColor = '#2b211d'; div.style.backgroundImage = 'var(--bg-noise)'; div.style.border = '1px solid var(--color-blood)'; div.style.borderRadius = '4px'; div.style.padding = '6px'; div.style.fontSize = '11px'; div.style.width = '120px'; div.style.boxShadow = '2px 2px 5px rgba(0,0,0,0.8)';
-                div.innerHTML = `<div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--color-border); margin-bottom:4px; padding-bottom:2px; color:var(--color-text-main);"><strong>${dClass}</strong> <span style="background:#110d0a; padding:0 4px; border-radius:10px; border:1px solid var(--color-border-dark);">${d.init}</span></div><div style="font-weight:bold; color:var(--color-text-highlight); margin-bottom:4px;">[${d.name}]</div><div style="line-height:1.4; color:#a1887f;">${desc}</div>`;
+                // 💡 [카드 크기 속성 수정] 우측 하단 셔플 배치를 위해 position: relative 부여
+                const div = document.createElement('div'); div.style.backgroundColor = '#2b211d'; div.style.backgroundImage = 'var(--bg-noise)'; div.style.border = '1px solid var(--color-blood)'; div.style.borderRadius = '4px'; div.style.padding = '6px'; div.style.fontSize = '11px'; div.style.width = '120px'; div.style.boxShadow = '2px 2px 5px rgba(0,0,0,0.8)'; div.style.position = 'relative';
+                
+                let shuffleHtml = '';
+                if (d.shuffle) {
+                    shuffleHtml = `
+                        <img src="https://itimg.kr/5341/shuffle.webp" style="position: absolute; right: 6px; bottom: 6px; width: 16px; height: 16px; filter: brightness(25); drop-shadow(1px 1px 2px #000);" alt="다시 섞기">
+                    `;
+                }
+
+                // 💡 이제 실시간 상태 변수인 mDeck을 기준으로 남은 매수가 정확히 찍힙니다!
+                let currentRemainingCards = mDeck.draw.length; 
+                let totalDeckCards = (MONSTER_DECKS[dClass] || []).length;
+
+                div.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--color-border); margin-bottom:4px; padding-bottom:2px; color:var(--color-text-main);">
+                        <div style="display:flex; flex-direction:column; align-items:flex-start;">
+                            <strong>${dClass}</strong>
+                            <span style="font-size:8px; color:#8d6e63; margin-top:1px;">🎴 덱: ${currentRemainingCards}/${totalDeckCards}</span>
+                        </div>
+                        <span style="background:#110d0a; padding:2px 6px; border-radius:10px; border:1px solid var(--color-border-dark); font-weight:bold;">${d.init}</span>
+                    </div>
+                    <div style="font-weight:bold; color:var(--color-text-highlight); margin-bottom:4px;">[${d.name}]</div>
+                    <div style="line-height:1.4; color:#a1887f; padding-bottom: 12px;">${desc}</div>
+                    ${shuffleHtml}
+                `;
                 container.appendChild(div);
             }
             m.currentCard = drawnCards[dClass]; 
             m.init = m.currentCard.init; 
             turnOrder.push({ type: 'monster', entity: m, init: m.init });
-            
             if(m.currentCard.shield) { m.shield += m.currentCard.shield; }
         });
         turnOrder.sort((a, b) => { let iA = a.type === 'hero' ? a.init - 0.1 : a.init; let iB = b.type === 'hero' ? b.init - 0.1 : b.init; return iA === iB ? a.entity.id.localeCompare(b.entity.id) : iA - iB; });
@@ -2342,17 +3119,127 @@ mList.appendChild(div);
     }
 
     function createCardElement(card) {
-       const div = document.createElement('div'); div.className = 'gloom-card';
-       div.innerHTML = `
-           <div style="background-color:#1a1412; padding:3px; text-align:center; font-weight:bold; font-size:12px; border-bottom:1px solid var(--color-border); color:var(--color-text-highlight);">${card.name}</div>
-           <div class="card-section card-top"><span style="color:var(--color-text-highlight); font-weight:bold; margin-bottom:4px;">▲</span>${card.top.desc}</div>
-           <div class="card-divider"><div class="card-init">${card.init}</div></div>
-           <div class="card-section card-bottom"><span style="color:#78909c; font-weight:bold; margin-bottom:4px;">▼</span>${card.bot.desc}</div>
-       `;
-       return div;
-   }
+        const div = document.createElement('div'); 
+        div.className = 'gloom-card';
+        
+        const getAoESvg = (aoeArr, scale) => {
+            if (!aoeArr || aoeArr.length === 0) return '';
+            let minC = Math.min(...aoeArr.map(p => p[0])) - 1; let maxC = Math.max(...aoeArr.map(p => p[0])) + 1;
+            let minR = Math.min(...aoeArr.map(p => p[1])) - 1; let maxR = Math.max(...aoeArr.map(p => p[1])) + 1;
+            
+            let hexRadius = 5.5 * scale;
+            let hexW = Math.sqrt(3) * hexRadius; let hexH = 2 * hexRadius; let yOffset = hexH * 0.75;
+            let svgHexes = ''; let aoeSet = new Set(aoeArr.map(p => `${p[0]},${p[1]}`));
+            
+            for (let r = minR; r <= maxR; r++) {
+                for (let c = minC; c <= maxC; c++) {
+                    if (!aoeSet.has(`${c},${r}`)) continue; // 회색 타일 렌더링 제외
+                    let cx = (c - minC) * hexW + (Math.abs(r % 2) === 1 ? hexW / 2 : 0) + hexRadius;
+                    let cy = (r - minR) * yOffset + hexRadius;
+                    let pts = `${cx},${cy - hexRadius} ${cx + hexW/2},${cy - hexRadius/2} ${cx + hexW/2},${cy + hexRadius/2} ${cx},${cy + hexRadius} ${cx - hexW/2},${cy + hexRadius/2} ${cx - hexW/2},${cy - hexRadius/2}`;
+                    svgHexes += `<polygon points="${pts}" fill="#e53935" stroke="#110d0a" stroke-width="${1*scale}" />`;
+                }
+            }
+            let totalW = (maxC - minC + 1.5) * hexW; let totalH = (maxR - minR + 1) * yOffset + hexRadius;
+            return `<svg width="${totalW}" height="${totalH}" viewBox="0 0 ${totalW} ${totalH}" style="filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.8));">${svgHexes}</svg>`;
+        };
 
-    function clearHighlights() { document.querySelectorAll('.hex-tile').forEach(h => h.classList.remove('highlight-move', 'highlight-attack', 'highlight-target')); }
+        const getActionDesc = (action, isTop) => {
+            if (!action) return `<span style="color:#78909c; font-weight:bold;">행동 없음</span>`;
+            
+            let lineCount = 0;
+            if (action.type) lineCount++; if (action.r && action.r > 1) lineCount++;
+            if (action.target && action.target > 1) lineCount++; if (action.pierce) lineCount++;
+            if (action.retaliate) lineCount++; if (action.condition) lineCount++;
+            if (action.conditionSelf) lineCount += 1.5; if (action.infuse) lineCount++;
+            if (action.consume) lineCount++;
+            
+            let cleanDesc = "";
+            if (action.desc) {
+                let plainText = action.desc.replace(/<[^>]*>?/gm, '');
+                let isRedundant = lineCount > 0 && plainText.match(/(근접|원거리|마력|폭발성)? ?(공격|이동|방어|치유|하단) \d+/);
+                if (!isRedundant) { cleanDesc = plainText; lineCount += (cleanDesc.length > 15 ? 2 : 1.5); }
+            }
+
+            let scale = 1;
+            if (lineCount >= 5.5) scale = 0.7; else if (lineCount >= 4.0) scale = 0.82; 
+
+            let fBase = (12 * scale).toFixed(1); let fSmall = (11 * scale).toFixed(1); let fTiny = (12 * 0.7 * scale).toFixed(1); 
+            let iSize = (13 * scale).toFixed(1); let marginY = scale < 1 ? 0 : 1; 
+
+            let lines = [];
+            const getIcon = (url) => `<img src="${url}" style="width:${iSize}px; height:${iSize}px; vertical-align:middle; filter:brightness(25);">`;
+            
+            if (action.type === 'attack') lines.push(`공격 ${getIcon('https://itimg.kr/5341/attack.webp')} <b>${action.val}</b>`);
+            else if (action.type === 'move') lines.push(`이동 ${getIcon('https://itimg.kr/5341/move.webp')} <b>${action.val}</b>`);
+            else if (action.type === 'jump') lines.push(`도약 ${getIcon('https://itimg.kr/5341/jump.webp')} <b>${action.val}</b>`);
+            else if (action.type === 'teleport') lines.push(`순간이동 ${getIcon('https://itimg.kr/5341/teleport.webp')} <b>${action.val}</b>`);
+            else if (action.type === 'heal') lines.push(`치유 <img src="https://itimg.kr/5341/hp.webp" style="width:${iSize}px; height:${iSize}px; vertical-align:middle; filter:invert(15%) sepia(85%) saturate(5000%) hue-rotate(350deg);"> <b>${action.val}</b>`);
+            else if (action.type === 'shield') {
+                lines.push(`방어 <img src="https://itimg.kr/5341/shield.webp" style="width:${iSize}px; height:${iSize}px; vertical-align:middle; filter:invert(45%) sepia(60%) saturate(2500%) hue-rotate(185deg);"> <b>${action.val}</b>`);
+                if (!action.target && !action.aoe) lines.push(`<div style="font-size:${fTiny}px; color:#90a4ae; text-align:center; margin-top:-2px;">자신</div>`);
+            }
+
+            if (action.r && action.r > 1) lines.push(`사거리 ${getIcon('https://itimg.kr/5341/range.webp')} <b>${action.r}</b>`);
+            if (action.target && action.target > 1) lines.push(`대상 ${getIcon('https://itimg.kr/5341/target.webp')} <b>${action.target}</b>`);
+            if (action.pierce) lines.push(`관통 <img src="https://itimg.kr/5341/pierce.png" style="width:${iSize}px; height:${iSize}px; vertical-align:middle;"> <b>${action.pierce}</b>`);
+            if (action.retaliate) lines.push(`반격 ${getIcon('https://itimg.kr/5341/retaliate.webp')} <b>${action.retaliate}</b>`);
+
+            if (action.condition) lines.push(`<span style="color:#e57373; font-size:${fBase}px;">${COND_NAME[action.condition] || action.condition}</span> <span style="transform:scale(${scale}); display:inline-block;">${COND_MAP[action.condition] || ""}</span>`);
+            if (action.conditionSelf) {
+                lines.push(`<span style="color:#81c784; font-size:${fBase}px;">${COND_NAME[action.conditionSelf] || action.conditionSelf}</span> <span style="transform:scale(${scale}); display:inline-block;">${COND_MAP[action.conditionSelf] || ""}</span>`);
+                lines.push(`<div style="font-size:${fTiny}px; color:#90a4ae; text-align:center; margin-top:-2px;">자신</div>`);
+            }
+
+            if (action.infuse) lines.push(`<div style="margin-top:2px; transform:scale(${scale}); display:inline-block;">${getElementEmoji(action.infuse)}</div>`);
+            if (action.consume) {
+                let bonusText = action.consumeBonus ? ` <span style="font-size:${fBase}px; font-weight:bold;">+${action.consumeBonus.val}</span><span style="transform:scale(${scale}); display:inline-block;">${action.consumeBonus.condition ? ' ' + (COND_MAP[action.consumeBonus.condition] || '') : ''}</span>` : "";
+                let csName = { "Fire": "fire", "Ice": "ice", "Wind": "air", "Earth": "earth", "Light": "light", "Dark": "dark" }[action.consume] || action.consume.toLowerCase();
+                lines.push(`<div style="margin-top:2px;"><img src="https://itimg.kr/5341/cs${csName}.webp" style="width:${(20*scale).toFixed(1)}px; height:${(20*scale).toFixed(1)}px; vertical-align:middle; filter:drop-shadow(1px 1px 2px #000);">${bonusText}</div>`);
+            }
+
+            let htmlContent = "";
+            // 💡 범위(AoE)가 있다면 좌우 분할(Flex) 레이아웃 적용
+            if (action.aoe) {
+                let leftLines = lines.map(line => `<div style="margin: ${marginY}px 0; text-align: right;">${line}</div>`).join("");
+                htmlContent = `<div style="display:flex; justify-content:center; align-items:center; width:100%; gap: 10px;">
+                                   <div style="display:flex; flex-direction:column; align-items:flex-end;">${leftLines}</div>
+                                   <div>${getAoESvg(action.aoe, scale)}</div>
+                               </div>`;
+            } else {
+                htmlContent = lines.map(line => `<div style="margin: ${marginY}px 0; width: 100%; text-align: center;">${line}</div>`).join("");
+            }
+
+            if (cleanDesc) htmlContent += `<div style="font-size:${(10.5*scale).toFixed(1)}px; color:#bcaaa4; margin-top:4px; padding-top:2px; border-top:1px dashed #4a3b32; width:100%; text-align:center; word-break:keep-all; line-height:1.2;">${cleanDesc}</div>`;
+                              
+            return `<div style="display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; height:100%; font-size:${fBase}px; line-height:1.25;">${htmlContent}</div>`;
+        };
+
+        div.innerHTML = `
+            <div style="background-color:#1a1412; padding:3px; text-align:center; font-weight:bold; font-size:12px; border-bottom:1px solid var(--color-border); color:var(--color-text-highlight);">${card.name}</div>
+            <div class="card-section card-top">${getActionDesc(card.top, true)}</div>
+            <div class="card-divider">
+                <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; position:absolute; z-index:10;">
+                    <div style="color:var(--color-text-highlight); font-size:11px; line-height:0.8; padding-bottom:2px;">▲</div>
+                    <div style="width:28px; height:28px; background:#1a1412; color:var(--color-text-main); border-radius:50%; display:flex; justify-content:center; align-items:center; font-weight:900; font-size:14px; border:1px solid var(--color-border); box-shadow:inset 0 0 5px #000;">${card.init}</div>
+                    <div style="color:#78909c; font-size:11px; line-height:0.8; padding-top:2px;">▼</div>
+                </div>
+            </div>
+            <div class="card-section card-bottom">${getActionDesc(card.bot, false)}</div>
+        `;
+        return div;
+    }
+
+    function clearHighlights() { 
+        document.querySelectorAll('.hex-tile').forEach(h => h.classList.remove('highlight-move', 'highlight-attack', 'highlight-target', 'selected-target')); 
+    }
+
+    function cancelAction() { 
+        window.tempActiveCardId = null; window.tempActiveHalf = null; 
+        window.selectedTargets = []; 
+        window.pendingAoE = null; // 범위 대기 상태 초기화 (필수)
+        document.getElementById('action-banner').style.display = 'none'; clearHighlights(); 
+    }
 
     function initiateAction(card, half) {
         if (isMoving) return; 
@@ -2367,16 +3254,25 @@ mList.appendChild(div);
         }
 
         window.tempActiveCardId = card.id; window.tempActiveHalf = half;
+        window.selectedTargets = []; // 💡 선택 타겟 보관함 초기화
+
         if (['move', 'jump', 'teleport'].includes(action.type)) {
-            document.getElementById('action-msg').innerHTML = `[${card.name}] ${action.desc}: 이동할 타일 클릭`; document.getElementById('action-banner').style.display = 'flex';
+            document.getElementById('action-msg').innerHTML = `[${card.name}] ${action.desc}: 이동할 타일 클릭`; 
+            document.getElementById('action-banner').style.display = 'flex';
             highlightHexes(action);
         } else if (action.type === 'attack') {
-            document.getElementById('action-msg').innerHTML = `[${card.name}] ${action.desc}: 🎯대상을 클릭`; document.getElementById('action-banner').style.display = 'flex';
+            if (action.aoe) {
+                document.getElementById('action-msg').innerHTML = `[${card.name}] 범위 중심 타일 클릭`; 
+            } else if (action.target && action.target > 1) {
+                // 💡 다중 타겟용 안내 및 선택 완료 버튼 출력
+                document.getElementById('action-msg').innerHTML = `[${card.name}] 🎯대상을 선택하세요 (0/${action.target}명) <button onclick="confirmMultiAttack()" class="btn-primary" style="margin-left:10px; padding:4px 8px;">선택 완료</button>`;
+            } else {
+                document.getElementById('action-msg').innerHTML = `[${card.name}] 🎯대상을 클릭하세요`;
+            }
+            document.getElementById('action-banner').style.display = 'flex';
             highlightHexes(action);
         } else { executeInstant(action); }
     }
-
-    function cancelAction() { window.tempActiveCardId = null; window.tempActiveHalf = null; document.getElementById('action-banner').style.display = 'none'; clearHighlights(); }
 
     function highlightHexes(action) {
         clearHighlights(); const hero = turnOrder[currentTurnIdx].entity;
@@ -2392,9 +3288,13 @@ mList.appendChild(div);
                         const hex = document.getElementById(`hex-board-hex-${c}-${r}`); 
                         if (hex) {
                             hex.classList.add('highlight-attack');
-                            const occ = party.concat(monsters).find(e => e.hp > 0 && e.revealed && e.x === c && e.y === r && !e.conditions.invisible);
-                            if (occ && !occ.isHero) {
-                                if (action.r <= 1 || checkLineOfSight(hero.x, hero.y, c, r)) hex.classList.add('highlight-target');
+                            if (action.aoe) {
+                                hex.classList.add('highlight-target');
+                            } else {
+                                const occ = party.concat(monsters).find(e => e.hp > 0 && e.revealed && e.x === c && e.y === r && !e.conditions.invisible);
+                                if (occ && !occ.isHero && window.selectedTargets && !window.selectedTargets.includes(occ)) {
+                                    if (action.r <= 1 || checkLineOfSight(hero.x, hero.y, c, r)) hex.classList.add('highlight-target');
+                                }
                             }
                         }
                     }
@@ -2404,6 +3304,7 @@ mList.appendChild(div);
     }
 
     async function handleHexClick(c, r) {
+        if (window.dragDist > 5) return;
         if(!window.tempActiveHalf) return;
         const hero = turnOrder[currentTurnIdx].entity;
         const action = window.tempActiveHalf === 'top' ? turnCards.find(card => card.id === window.tempActiveCardId).top : turnCards.find(card => card.id === window.tempActiveCardId).bot;
@@ -2412,104 +3313,235 @@ mList.appendChild(div);
         if (['move', 'jump', 'teleport'].includes(action.type) && hex.classList.contains('highlight-move')) {
             if (action.type === 'teleport') hero.isTeleporting = true;
             const path = findPath(hero.x, hero.y, c, r, action.type);
-            if(window.tempActiveHalf === 'top') usedTopCardId = window.tempActiveCardId; if(window.tempActiveHalf === 'bot') usedBotCardId = window.tempActiveCardId;
+            
+            if(window.tempActiveHalf === 'top') usedTopCardId = window.tempActiveCardId; 
+            if(window.tempActiveHalf === 'bot') usedBotCardId = window.tempActiveCardId;
             cancelAction();
+            
             animateMovement(hero, path, action.type, () => { 
                 log(`🏃 ${hero.name} 이동 완료.`, "log-hero"); 
-                if (action.infuse) {
-                    infusedThisTurn[action.infuse] = true;
-                    log(`✨ [원소 예고] 턴 종료 시 ${getElementEmoji(action.infuse)} ${getElementName(action.infuse)} 원소 주입이 예약됩니다.`, "log-sys");
-                }
+                if (action.infuse) { infusedThisTurn[action.infuse] = true; log(`✨ [원소 예고] 턴 종료 시 원소 주입이 예약됩니다.`, "log-sys"); }
                 checkHeroTurnEnd(); 
             });
-        } else if (action.type === 'attack' && hex.classList.contains('highlight-attack')) {
-            const target = monsters.find(m => m.x === c && m.y === r && m.hp > 0 && m.revealed && !m.conditions.invisible);
-            if(target) {
-                if (action.r > 1 && hexDistance(hero.x, hero.y, c, r) > 1 && !checkLineOfSight(hero.x, hero.y, c, r)) { log(`❌ 시야가 가로막혀 있습니다!`, "log-warn"); return; }
-                
-                let hasAdv = (hero.conditions.strengthen > 0);
-                let hasDisadv = (hero.conditions.muddle > 0);
-                
-                // 💡 추가된 로직: 원거리 공격(사거리 1 초과)을 근접(거리 1)에서 사용하면 불이익 획득
-                if (action.r > 1 && hexDistance(hero.x, hero.y, c, r) === 1) {
-                    hasDisadv = true;
-                }
-
-                let baseDamage = action.val;
-                let appliedCondition = action.condition;
-                
-                if (action.consume && elements[action.consume] > 0) {
-                    // 💡 추가된 로직: 소비하는 원소가 '강함(2)' 상태라면 이점 획득
-                    if (elements[action.consume] === 2) {
-                        hasAdv = true;
-                        log(`✨ 짙게 깔린 ${getElementEmoji(action.consume)} ${getElementName(action.consume)} 원소의 힘으로 공격에 이점을 얻습니다!`, "log-sys");
-                    }
-
-                    elements[action.consume] = 0; 
-                    log(`🔥 [원소 소비] 전장의 ${getElementEmoji(action.consume)} ${getElementName(action.consume)} 원소 에너지를 빨아들여 광폭화 공격을 개시합니다!`, "log-hero");
-                    if (action.consumeBonus) {
-                        baseDamage += action.consumeBonus.val;
-                        if (action.consumeBonus.condition) {
-                            appliedCondition = action.consumeBonus.condition;
+        } 
+        else if (action.type === 'attack' && hex.classList.contains('highlight-attack')) {
+            if (action.aoe) {
+                let currentRot = window.pendingAoE ? window.pendingAoE.rotation : 0;
+                window.pendingAoE = { center: {c, r}, rotation: currentRot, action: action };
+                renderPendingAoE();
+            } 
+            else {
+                const mTarget = monsters.find(m => m.x === c && m.y === r && m.hp > 0 && m.revealed && !m.conditions.invisible);
+                if (mTarget) {
+                    if (action.r > 1 && hexDistance(hero.x, hero.y, c, r) > 1 && !checkLineOfSight(hero.x, hero.y, c, r)) { log(`❌ 시야가 가로막혀 있습니다!`, "log-warn"); return; }
+                    
+                    if (action.target && action.target > 1) {
+                        const idx = window.selectedTargets.indexOf(mTarget);
+                        if (idx > -1) {
+                            window.selectedTargets.splice(idx, 1); hex.classList.remove('selected-target');
+                        } else {
+                            if (window.selectedTargets.length >= action.target) { log(`❌ 최대 타겟(${action.target}명)을 모두 선택했습니다!`, "log-warn"); return; }
+                            window.selectedTargets.push(mTarget); hex.classList.add('selected-target');
                         }
+                        const card = turnCards.find(cd => cd.id === window.tempActiveCardId);
+                        document.getElementById('action-msg').innerHTML = `[${card.name}] 🎯대상을 선택하세요 (${window.selectedTargets.length}/${action.target}명) <button onclick="confirmMultiAttack()" class="btn-primary" style="margin-left:10px; padding:4px 8px;">선택 완료</button>`;
+                    } 
+                    else {
+                        // 일반 공격: 정보 백업 후 일괄 엔진으로 전달
+                        const savedHalf = window.tempActiveHalf;
+                        const savedCardId = window.tempActiveCardId;
+                        cancelAction();
+                        await executeAttackOnTargets([mTarget], action, savedHalf, savedCardId);
                     }
-                    renderElementsUI();
                 }
-
-                // 이점과 불이익이 동시에 있으면 서로 상쇄되어 normal 처리
-                let advType = 'normal';
-                if (hasAdv && !hasDisadv) advType = 'advantage';
-                else if (!hasAdv && hasDisadv) advType = 'disadvantage';
-
-                let modResult = drawModifier(hero.modifierDeck, advType);
-                
-                const savedHalf = window.tempActiveHalf;
-                const savedCardId = window.tempActiveCardId;
-                cancelAction();
-
-                await animateCardDraw(modResult.drawn, modResult.card, advType, hero.name);
-
-                let modifiedAtk = calcDamage(baseDamage, modResult.card);
-                if (target.conditions.poison) modifiedAtk += 1;
-
-                let effectiveShield = Math.max(0, target.shield - (action.pierce || 0));
-                let actualDmg = Math.max(0, modifiedAtk - effectiveShield);
-                
-                target.hp = Math.max(0, target.hp - actualDmg);
-                playVFX(c, r, `-${actualDmg}`, "#b71c1c", "hit");
-                
-                let modText = modResult.drawn.map(c => c.text).join(", ");
-                if (advType !== 'normal') modText = `[${modText}] -> ${modResult.card.text}`;
-
-                log(`⚔️ ${hero.name} 공격! (기본 ${baseDamage}, 보정 ${modText}) => ${target.displayName||target.name} 피해 ${actualDmg}. (방어 ${target.shield}, 관통 ${action.pierce||0})`, "log-hero");
-                
-                if (appliedCondition && target.hp > 0) applyCondition(target, appliedCondition);
-                if (action.conditionSelf) applyCondition(hero, action.conditionSelf);
-                if(target.hp === 0) {
-                    log(`💀 ${target.displayName||target.name} 처치됨!`, "log-sys");
-                } else {
-                    // 반격 로직 (대상 생존 시 발동)
-                    // 조건: 근접 공격 스킬(action.r <= 1)이고, 실제 거리가 1일 때, 타겟에게 반격 수치가 있을 때
-                    if (target.retaliate > 0 && action.r <= 1 && hexDistance(hero.x, hero.y, c, r) === 1) {
-                        let retDmg = target.retaliate;
-                        hero.hp = Math.max(0, hero.hp - retDmg);
-                        playVFX(hero.x, hero.y, `-${retDmg}`, "#8e2424", "hit");
-                        log(`⚡ ${target.displayName || target.name}의 반격 발동! ${hero.name}에게 ${retDmg} 피해.`, "log-monster");
-                        if (hero.hp === 0) log(`💀 ${hero.name} 처치됨!`, "log-sys");
-                      }
-                }
-                
-                if (action.infuse) {
-                    infusedThisTurn[action.infuse] = true;
-                    log(`✨ [원소 예고] 턴 종료 시 ${getElementEmoji(action.infuse)} ${getElementName(action.infuse)} 원소 주입이 예약됩니다.`, "log-sys");
-                }
-
-                if(savedHalf === 'top') usedTopCardId = savedCardId; 
-                if(savedHalf === 'bot') usedBotCardId = savedCardId;
-
-                renderEntitiesOnMap(); renderEntities(); checkHeroTurnEnd();
             }
         }
+    }
+
+    // 💡 (절대 지우면 안 되는) 범위 회전 도우미 함수들
+    function getAbsoluteRotatedAoE(centerC, centerR, aoeArr, steps) {
+        const offsetToCubic = (c, r) => ({ q: c - Math.floor(r / 2), r: r, s: -(c - Math.floor(r / 2)) - r });
+        const cubicToOffset = (q, r, s) => ({ c: q + Math.floor(r / 2), r: r });
+
+        let centerCubic = offsetToCubic(centerC, centerR);
+        let resultCoords = [];
+
+        aoeArr.forEach(offset => {
+            let [dc, dr] = offset;
+            let offCubic = offsetToCubic(dc, dr); 
+            let q_off = offCubic.q; let r_off = offCubic.r; let s_off = offCubic.s;
+
+            for(let i=0; i<steps; i++) {
+                let temp = q_off; q_off = -r_off; r_off = -s_off; s_off = -temp;
+            }
+            let targetOffset = cubicToOffset(centerCubic.q + q_off, centerCubic.r + r_off, centerCubic.s + s_off);
+            resultCoords.push([targetOffset.c, targetOffset.r]);
+        });
+        return resultCoords;
+    }
+
+    function renderPendingAoE() {
+        document.querySelectorAll('.hex-tile').forEach(h => h.classList.remove('selected-target'));
+        
+        if(!window.pendingAoE) return;
+        let { center, rotation, action } = window.pendingAoE;
+        
+        let absoluteAoE = getAbsoluteRotatedAoE(center.c, center.r, action.aoe, rotation);
+
+        absoluteAoE.forEach(pos => {
+            let tc = pos[0]; let tr = pos[1];
+            let hex = document.getElementById(`hex-board-hex-${tc}-${tr}`);
+            if (hex) hex.classList.add('selected-target'); 
+        });
+
+        const card = turnCards.find(cd => cd.id === window.tempActiveCardId);
+        document.getElementById('action-msg').innerHTML = 
+            `[${card.name}] 🎯 범위를 조절하세요. 
+             <button onclick="rotateAoE()" class="btn-primary" style="margin-left:10px; padding:4px 8px;">🔄 회전(R)</button>
+             <button onclick="confirmAoEAttack()" class="btn-primary" style="margin-left:5px; padding:4px 8px; background-color:#8e2424;">⚔️ 공격 확정</button>`;
+        document.getElementById('action-banner').style.display = 'flex';
+    }
+
+    function rotateAoE() {
+        if(!window.pendingAoE) return;
+        window.pendingAoE.rotation = (window.pendingAoE.rotation + 1) % 6;
+        renderPendingAoE();
+    }
+
+    window.addEventListener('keydown', (e) => {
+        if((e.key === 'r' || e.key === 'R') && window.pendingAoE) rotateAoE();
+    });
+
+    // 💡 다중 타겟 확정 시 실행
+    async function confirmMultiAttack() {
+        if (!window.selectedTargets || window.selectedTargets.length === 0) {
+            log("❌ 선택된 대상이 없습니다.", "log-warn"); return;
+        }
+        const savedHalf = window.tempActiveHalf;
+        const savedCardId = window.tempActiveCardId;
+        const action = savedHalf === 'top' ? turnCards.find(c => c.id === savedCardId).top : turnCards.find(c => c.id === savedCardId).bot;
+        
+        const targets = [...window.selectedTargets];
+        cancelAction();
+        await executeAttackOnTargets(targets, action, savedHalf, savedCardId);
+    }
+
+    // 💡 범위 공격 확정 시 실행
+    async function confirmAoEAttack() {
+        if(!window.pendingAoE) return;
+        
+        const savedHalf = window.tempActiveHalf;
+        const savedCardId = window.tempActiveCardId;
+        let { center, rotation, action } = window.pendingAoE;
+        const hero = turnOrder[currentTurnIdx].entity;
+        
+        let absoluteAoE = getAbsoluteRotatedAoE(center.c, center.r, action.aoe, rotation);
+        let targetsToAttack = [];
+
+        let originalR = action.r; action.r = 99; // 시야 체크용 임시 사거리
+
+        absoluteAoE.forEach(pos => {
+            let tc = pos[0]; let tr = pos[1];
+            const mTarget = monsters.find(m => m.x === tc && m.y === tr && m.hp > 0 && m.revealed && !m.conditions.invisible);
+            if (mTarget) {
+                if (tc === hero.x && tr === hero.y) targetsToAttack.push(mTarget);
+                else if (checkLineOfSight(hero.x, hero.y, tc, tr)) targetsToAttack.push(mTarget);
+            }
+        });
+
+        action.r = originalR; window.pendingAoE = null; cancelAction(); 
+
+        if (targetsToAttack.length > 0) {
+            await executeAttackOnTargets(targetsToAttack, action, savedHalf, savedCardId);
+        } else {
+            log(`허공을 공격했습니다!`, "log-warn");
+            if (savedHalf === 'top') usedTopCardId = savedCardId; 
+            else if (savedHalf === 'bot') usedBotCardId = savedCardId;
+            checkHeroTurnEnd(); 
+        }
+    }
+
+    // 💡 통합 공격 판정 엔진
+    async function executeAttackOnTargets(targetsToAttack, action, savedHalf, savedCardId) {
+        const hero = turnOrder[currentTurnIdx].entity;
+
+        for (const target of targetsToAttack) {
+            if (target.hp <= 0) continue; 
+
+            let hasAdv = (hero.conditions.strengthen > 0);
+            let hasDisadv = (hero.conditions.muddle > 0);
+            if (action.r > 1 && hexDistance(hero.x, hero.y, target.x, target.y) === 1) hasDisadv = true;
+
+            let baseDamage = action.val;
+            let appliedCondition = action.condition;
+
+            if (action.consume && elements[action.consume] > 0) {
+                if (elements[action.consume] === 2) hasAdv = true;
+                if (elements[action.consume] > 0) {
+                    elements[action.consume] = 0;
+                    log(`🔥 [원소 소비] ${getElementEmoji(action.consume)} 원소 파워 발동!`, "log-hero");
+                    renderElementsUI();
+                }
+                if (action.consumeBonus) {
+                    baseDamage += action.consumeBonus.val;
+                    if (action.consumeBonus.condition) appliedCondition = action.consumeBonus.condition;
+                }
+            }
+
+            let advType = 'normal';
+            if (hasAdv && !hasDisadv) advType = 'advantage';
+            else if (!hasAdv && hasDisadv) advType = 'disadvantage';
+
+            let modResult = drawModifier(hero.modifierDeck, advType);
+
+            await animateCardDraw(modResult.drawn, modResult.card, advType, `${hero.name} ➡️ ${target.displayName || target.name}`);
+
+            let modifiedAtk = calcDamage(baseDamage, modResult.card);
+            if (target.conditions.poison) modifiedAtk += 1;
+
+            let effectiveShield = Math.max(0, target.shield - (action.pierce || 0));
+            let actualDmg = Math.max(0, modifiedAtk - effectiveShield);
+            
+            target.hp = Math.max(0, target.hp - actualDmg);
+            playVFX(target.x, target.y, `-${actualDmg}`, "#b71c1c", "hit");
+            
+            let modText = modResult.drawn.map(c => c.text).join(", ");
+            if (advType !== 'normal') modText = `[${modText}] -> ${modResult.card.text}`;
+
+            log(`⚔️ 공격 판정 (${target.displayName || target.name}): (기본 ${baseDamage}, 보정 ${modText}) => 피해 ${actualDmg}`, "log-hero");
+            
+            if (appliedCondition && target.hp > 0) applyCondition(target, appliedCondition);
+            if (action.conditionSelf) applyCondition(hero, action.conditionSelf);
+
+            if (target.hp === 0) {
+                log(`💀 ${target.displayName || target.name} 처치됨!`, "log-sys");
+            } else {
+                if (target.retaliate > 0 && action.r <= 1 && hexDistance(hero.x, hero.y, target.x, target.y) === 1) {
+                    hero.hp = Math.max(0, hero.hp - target.retaliate);
+                    playVFX(hero.x, hero.y, `-${target.retaliate}`, "#8e2424", "hit");
+                    log(`⚡ ${target.displayName || target.name} 반격! ${hero.name}에게 ${target.retaliate} 피해.`, "log-monster");
+                }
+            }
+            renderEntitiesOnMap(); renderEntities();
+        }
+
+        if (action.infuse) {
+            infusedThisTurn[action.infuse] = true;
+            log(`✨ [원소 예고] 턴 종료 시 원소 주입이 예약됩니다.`, "log-sys");
+        }
+
+        // 사용 완료된 카드 마킹
+        if (savedHalf === 'top') {
+            usedTopCardId = savedCardId; 
+        } else if (savedHalf === 'bot') {
+            usedBotCardId = savedCardId;
+        }
+
+        window.selectedTargets = []; 
+        window.pendingAoE = null;     
+        
+        // 마킹 완료 후 턴 종료 판정 함수 호출
+        checkHeroTurnEnd(); 
     }
 
     function executeInstant(action) {
@@ -2782,6 +3814,23 @@ mList.appendChild(div);
             monsterModifierDeck.drawPile = monsterModifierDeck.drawPile.concat(monsterModifierDeck.discardPile); monsterModifierDeck.discardPile = []; shuffleDeck(monsterModifierDeck.drawPile); monsterModifierDeck.needsShuffle = false;
             log(`🔀 몬스터 공용 보정 덱이 섞였습니다.`, "log-sys");
         }
+        if (needMonsterReshuffle) {
+            Object.keys(monsterDecksState).forEach(dClass => {
+                let mDeck = monsterDecksState[dClass];
+                if (mDeck) {
+                    // 드로우 패와 버림 패 합체
+                    mDeck.draw = mDeck.draw.concat(mDeck.discard);
+                    mDeck.discard = [];
+                    // 새로 무작위 뒤섞기
+                    for (let i = mDeck.draw.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [mDeck.draw[i], mDeck.draw[j]] = [mDeck.draw[j], mDeck.draw[i]];
+                    }
+                }
+            });
+            needMonsterReshuffle = false; 
+            log(`🎲 [리셔플] 다시 섞기 행동이 발생하여 몬스터 실시간 행동 덱을 새로 섞었습니다.`, "log-sys");
+        }
 
         const aliveMonsters = monsters.filter(m => m.hp > 0 && m.revealed);
         if(aliveMonsters.length === 0 && monsters.filter(m => !m.revealed).length === 0) { 
@@ -2837,8 +3886,9 @@ mList.appendChild(div);
                     <input type="checkbox" id="elite-toggle" onchange="toggleEliteMode()"> 👑 정예(Elite)
                 </label>
             </div>
-            <div class="palette-btn" onclick="selectPalette('h1')" id="pal-h1"><img src="https://itimg.kr/5341/brute.jpg" style="width:24px;height:24px;object-fit:cover;border-radius:50%;vertical-align:middle;border:1px solid var(--color-blood);"> 야만인<br>(아군)</div>
-            <div class="palette-btn" onclick="selectPalette('h2')" id="pal-h2">🧙‍♀️ 주문술사<br>(아군)</div>
+            <div class="palette-btn" onclick="selectPalette('h1')" id="pal-h1">영웅1</div>
+            <div class="palette-btn" onclick="selectPalette('h2')" id="pal-h2">영웅2</div>
+            <div class="palette-btn" onclick="selectPalette('h3')" id="pal-h3">영웅3</div>
         `;
         
         Object.keys(MONSTER_TEMPLATES).forEach(id => {
@@ -2866,6 +3916,7 @@ mList.appendChild(div);
     }
 
     function handleEditorClick(c, r) {
+        if (window.dragDist > 5) return;
         if (!editMap.diffTiles) editMap.diffTiles = [];
 
         if (currentPalette === 'void') {
@@ -2940,9 +3991,28 @@ mList.appendChild(div);
     }
 
     function startScenario(scenarioId) {
+        // 💡 alert 대신 서버에 '이 시나리오 가자고 추천(핑)' 남기기
+        if (gameMode === 'multi' && !isHost) {
+            window.dbUpdate(window.dbRef(window.firebaseDB, `rooms/${myRoomCode}/suggestions`), {
+                [myPlayerId]: scenarioId
+            });
+            return;
+        }
+
         currentScenarioId = scenarioId;
+        
+        if (gameMode === 'multi' && isHost) {
+            // 방장이 클릭하여 이동을 결정하면 모여있던 핑을 모두 지움
+            window.dbUpdate(window.dbRef(window.firebaseDB, `rooms/${myRoomCode}`), {
+                targetScenario: scenarioId,
+                suggestions: null
+            });
+        }
+
         triggerRandomEvent('travel', () => {
-            actualStartScenario(scenarioId);
+            if (gameMode === 'single') {
+                actualStartScenario(scenarioId);
+            }
         });
     }
 
@@ -2961,16 +4031,67 @@ mList.appendChild(div);
         doors = editMap.doors || []; doors.forEach(d => d.opened = false);
         diffTiles = JSON.parse(JSON.stringify(editMap.diffTiles || []));
         party = []; monsters = []; obstacles = []; traps = []; monsterModifierDeck = createModifierDeck();
+        monsterDecksState = {};
         
         elements = { Fire: 0, Ice: 0, Wind: 0, Earth: 0, Light: 0, Dark: 0 };
         infusedThisTurn = { Fire: false, Ice: false, Wind: false, Earth: false, Light: false, Dark: false };
         pendingInfusions = [];
         renderElementsUI();
 
-        // 여기도 기존 h1 초기화 코드를 아래처럼 덮어씌워주세요.
-        if (editMap.heroes.h1) party.push({ id:"h1", name:"야만인", icon:"🪓", image:"https://itimg.kr/5341/brute.jpg", hp:12, maxHp:12, shield:0, hand:[], discard:[], lost:[], exhausted:false, hasRestedThisRound:false, x:editMap.heroes.h1.c, y:editMap.heroes.h1.r, isHero:true, conditions:{}, modifierDeck:createModifierDeck() });
-        if (editMap.heroes.h2) party.push({ id:"h2", name:"주문술사", icon:"🧙‍♀️", image:"https://itimg.kr/5341/mage.webp", hp:6, maxHp:6, shield:0, hand:[], discard:[], lost:[], exhausted:false, hasRestedThisRound:false, x:editMap.heroes.h2.c, y:editMap.heroes.h2.r, isHero:true, conditions:{}, modifierDeck:createModifierDeck() });
-        party.forEach(h => { h.hand = JSON.parse(JSON.stringify(HERO_DECKS[h.name])); Object.keys(COND_MAP).forEach(k => h.conditions[k] = 0); h.conditions.poison = false; h.conditions.wound = false; });
+        let spawnPoints = [];
+        if (editMap.heroes.h1) spawnPoints.push(editMap.heroes.h1);
+        if (editMap.heroes.h2) spawnPoints.push(editMap.heroes.h2);
+        if (editMap.heroes.h3) spawnPoints.push(editMap.heroes.h3);
+        let playerInfos = [];
+        if (gameMode === 'multi' && window.currentRoomData) {
+            playerInfos = Object.keys(window.currentRoomData.players).map(pid => {
+                return { id: pid, name: window.currentRoomData.players[pid].name, class: window.currentRoomData.players[pid].class };
+            }).filter(p => p.class !== '선택 중...');
+        } else {
+            playerInfos = [{ id: myPlayerId, name: "나", class: selectedClasses[0] }];
+        }
+
+        // 스폰 지점이 부족하면 근처 빈칸을 동적으로 확보
+        if (spawnPoints.length > 0 && playerInfos.length > spawnPoints.length) {
+            let start = spawnPoints[0];
+            for (let r = 0; r < GRID_ROWS; r++) {
+                for (let c = 0; c < GRID_COLS; c++) {
+                    if (spawnPoints.length >= playerInfos.length) break;
+                    if (hexDistance(start.c, start.r, c, r) <= 2 && !isVoid(c,r) && !isClosedDoor(c,r) && !spawnPoints.some(p => p.c===c && p.r===r)) {
+                        spawnPoints.push({c, r});
+                    }
+                }
+            }
+        }
+        if (spawnPoints.length === 0) spawnPoints.push({c: 0, r: 0});
+
+        // 명단에 있는 친구들을 맵에 진짜 유닛으로 찍어내기
+        playerInfos.forEach((pInfo, idx) => {
+            const tmpl = HERO_TEMPLATES[pInfo.class];
+            const spawn = spawnPoints[idx] || spawnPoints[0];
+            
+            let newHero = {
+                id: `h${idx+1}`, ownerId: pInfo.id, playerName: pInfo.name, // 💡 누구의 캐릭터인지 소유자 태그 부착!
+                name: tmpl.name, icon: tmpl.icon, image: tmpl.image,
+                hp: tmpl.hp, maxHp: tmpl.hp, shield: 0,
+                hand: JSON.parse(JSON.stringify(HERO_DECKS[pInfo.class])), discard: [], lost: [],
+                exhausted: false, hasRestedThisRound: false,
+                x: spawn.c, y: spawn.r, isHero: true, conditions: {}, modifierDeck: createModifierDeck()
+            };
+
+            // 1인 플레이면 체력/공격력 2배 버프 적용
+            if (gameMode === 'single') { 
+                newHero.hp *= 2; newHero.maxHp *= 2;
+                newHero.hand.forEach(card => {
+                    if (card.top && card.top.type === 'attack') card.top.val *= 2;
+                    if (card.bot && card.bot.type === 'attack') card.bot.val *= 2;
+                });
+            }
+            Object.keys(COND_MAP).forEach(k => newHero.conditions[k] = 0);
+            newHero.conditions.poison = false; newHero.conditions.wound = false;
+            party.push(newHero);
+        });
+
 
         let counts = {};
         (editMap.monsters || []).forEach((m, idx) => {
@@ -3001,6 +4122,7 @@ mList.appendChild(div);
 
         obstacles = editMap.obstacles || []; traps = editMap.traps || [];
         generateRooms(); 
+        if(window.resetMapView) window.resetMapView();
         initBoardUI('hex-board', handleHexClick); renderEntitiesOnMap(); startPlanningPhase();
     }
 
@@ -3025,11 +4147,190 @@ mList.appendChild(div);
     }
 
     window.onload = function() { 
-        triggerRandomEvent('start', () => { 
-            switchLayout('world-map-layout');
-            renderScenarioPins(); // 💡 여기서 핀을 강제로 한번 그려줍니다.
-        }); 
+        switchLayout('intro-layout'); 
+        
     };
+    // ==========================================
+    // 📷 전천후 카메라 엔진 (역보정 및 초기 줌아웃 적용)
+    // ==========================================
+    window.dragDist = 0; 
+
+    (function setupCamera() {
+        window.resetMapView = () => {
+            document.dispatchEvent(new CustomEvent('reset-camera'));
+        };
+
+        document.querySelectorAll('.map-zone').forEach(zone => {
+            zone.style.touchAction = 'none'; 
+
+            const board = zone.querySelector('div[id$="board-container"]');
+            if(!board) return;
+
+            // 💡 지도는 1600px로 크니까 처음엔 0.5(50%) 배율로 축소해서 보여줍니다.
+            let mapScale = board.id === 'world-map-board-container' ? 0.5 : 1;
+            let mapPanX = board.id === 'world-map-board-container' ? 0 : 50;
+            let mapPanY = board.id === 'world-map-board-container' ? 0 : 50;
+            
+            let isDraggingMap = false;
+            let dragStartX = 0, dragStartY = 0;
+            let lastX = 0, lastY = 0;
+            let pointerCache = [];
+            let prevPinchDist = -1;
+
+            document.addEventListener('reset-camera', () => {
+                if (board.id === 'world-map-board-container') {
+                    mapScale = 0.5; mapPanX = 0; mapPanY = 0;
+                } else {
+                    mapScale = 1; mapPanX = 50; mapPanY = 50;
+                }
+                applyTransform();
+            });
+
+            const applyTransform = () => {
+                board.style.transform = `translate(${mapPanX}px, ${mapPanY}px) scale(${mapScale})`;
+                
+                if (board.id === 'world-map-board-container') {
+                    // 상자가 늘어나는 걸 막는 역보정 변수
+                    document.documentElement.style.setProperty('--inv-scale', 1 / mapScale);
+                    
+                    // 💡 폰트 크기를 키우기 위해 현재 지도 배율을 CSS로 넘겨주는 변수 추가!
+                    document.documentElement.style.setProperty('--map-scale', mapScale); 
+                }
+            };
+            const constrainBounds = (targetX, targetY) => {
+                const viewW = zone.clientWidth;
+                const viewH = zone.clientHeight;
+                
+                // 💡 핵심 수정: 껍데기 상자의 높이가 아니라, 안에 들어있는 '실제 지도 이미지'의 진짜 픽셀 크기를 끝부분으로 인식하게 강제합니다!
+                let actualW = board.offsetWidth;
+                let actualH = board.offsetHeight;
+                
+                if (board.id === 'world-map-board-container') {
+                    const mapImg = document.getElementById('world-map-img');
+                    if (mapImg && mapImg.offsetHeight > 0) {
+                        actualW = mapImg.offsetWidth;
+                        actualH = mapImg.offsetHeight;
+                    }
+                }
+
+                const boardW = actualW * mapScale;
+                const boardH = actualH * mapScale;
+                const pad = 120; // 맵 끝부분 여백
+
+                let minX = boardW < viewW ? -pad : viewW - boardW - pad;
+                let maxX = boardW < viewW ? viewW - boardW + pad : pad;
+                let minY = boardH < viewH ? -pad : viewH - boardH - pad;
+                let maxY = boardH < viewH ? viewH - boardH + pad : pad;
+
+                return { 
+                    x: Math.max(minX, Math.min(maxX, targetX)), 
+                    y: Math.max(minY, Math.min(maxY, targetY)) 
+                };
+            };
+
+            const processZoom = (zoomAmount, mouseX, mouseY) => {
+                const newScale = Math.min(Math.max(0.15, mapScale * zoomAmount), 3.0);
+                if (newScale === mapScale) return;
+
+                let targetX = mouseX - (mouseX - mapPanX) * (newScale / mapScale);
+                let targetY = mouseY - (mouseY - mapPanY) * (newScale / mapScale);
+                
+                mapScale = newScale;
+                let clamped = constrainBounds(targetX, targetY);
+                mapPanX = clamped.x;
+                mapPanY = clamped.y;
+                applyTransform();
+            };
+
+            zone.addEventListener('pointerdown', (e) => {
+                if (e.pointerType === 'mouse' && e.button !== 0) return; 
+                pointerCache.push(e);
+                if (pointerCache.length === 1) { 
+                    isDraggingMap = true;
+                    dragStartX = e.clientX - mapPanX;
+                    dragStartY = e.clientY - mapPanY;
+                    lastX = e.clientX;
+                    lastY = e.clientY;
+                    window.dragDist = 0; 
+                    zone.style.cursor = 'grabbing';
+                }
+            });
+
+            zone.addEventListener('pointermove', (e) => {
+                const index = pointerCache.findIndex(p => p.pointerId === e.pointerId);
+                if (index !== -1) pointerCache[index] = e;
+
+                if (pointerCache.length === 2) {
+                    const dx = pointerCache[0].clientX - pointerCache[1].clientX;
+                    const dy = pointerCache[0].clientY - pointerCache[1].clientY;
+                    const curPinchDist = Math.hypot(dx, dy);
+
+                    if (prevPinchDist > 0) {
+                        const zoomAmount = curPinchDist / prevPinchDist; 
+                        const rect = zone.getBoundingClientRect();
+                        const midX = ((pointerCache[0].clientX + pointerCache[1].clientX) / 2) - rect.left;
+                        const midY = ((pointerCache[0].clientY + pointerCache[1].clientY) / 2) - rect.top;
+                        processZoom(zoomAmount, midX, midY);
+                    }
+                    prevPinchDist = curPinchDist;
+                    isDraggingMap = false; 
+                } 
+                else if (pointerCache.length === 1 && isDraggingMap) {
+                    window.dragDist += Math.abs(e.clientX - lastX) + Math.abs(e.clientY - lastY);
+                    lastX = e.clientX;
+                    lastY = e.clientY;
+                    
+                    let targetX = e.clientX - dragStartX;
+                    let targetY = e.clientY - dragStartY;
+
+                    let clamped = constrainBounds(targetX, targetY);
+                    mapPanX = clamped.x;
+                    mapPanY = clamped.y;
+
+                    if (targetX !== clamped.x) dragStartX = e.clientX - clamped.x;
+                    if (targetY !== clamped.y) dragStartY = e.clientY - clamped.y;
+
+                    applyTransform(); 
+                }
+            });
+
+            const removePointer = (e) => {
+                const index = pointerCache.findIndex(p => p.pointerId === e.pointerId);
+                if (index !== -1) pointerCache.splice(index, 1); 
+
+                if (pointerCache.length < 2) prevPinchDist = -1;
+                
+                if (pointerCache.length === 1) {
+                    dragStartX = pointerCache[0].clientX - mapPanX;
+                    dragStartY = pointerCache[0].clientY - mapPanY;
+                    lastX = pointerCache[0].clientX;
+                    lastY = pointerCache[0].clientY;
+                    isDraggingMap = true;
+                } else if (pointerCache.length === 0) {
+                    isDraggingMap = false;
+                    zone.style.cursor = 'grab';
+                }
+            };
+
+            zone.addEventListener('pointerup', removePointer);
+            zone.addEventListener('pointercancel', removePointer);
+            zone.addEventListener('pointerout', removePointer);
+
+            zone.addEventListener('wheel', (e) => {
+                e.preventDefault(); 
+                const delta = e.deltaMode === 1 ? e.deltaY * 15 : e.deltaY;
+                const zoomAmount = Math.exp(Math.max(-5, Math.min(5, -delta * 0.002))); 
+                
+                const rect = zone.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+
+                processZoom(zoomAmount, mouseX, mouseY);
+            }, { passive: false });
+
+            applyTransform(); 
+        });
+    })();
 </script>
 
 </body>
