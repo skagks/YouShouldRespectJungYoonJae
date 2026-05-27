@@ -20,7 +20,6 @@
             --color-blood-dark: #4a0000;
         }
 
-        /* 커스텀 스크롤바 */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #0c0908; border-left: 1px solid var(--color-border-dark); }
         ::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 4px; }
@@ -576,11 +575,17 @@
             background-color: #6a1b1b;
             box-shadow: inset 0 0 20px var(--color-blood);
         }
-        .hex-tile.selected-target::after {
-            content: '✔️'; position: absolute; top: 45%; left: 50%;
-            transform: translate(-50%, -50%); font-size: 26px; z-index: 20;
-            color: #fff; pointer-events: none; filter: drop-shadow(0 0 5px #000);
-        }
+        .entity-sprite.target-selected-sprite::after {
+    content: '✔️'; 
+    position: absolute; 
+    top: 30%; left: 50%;
+    transform: translate(-50%, -50%); 
+    font-size: 28px; 
+    z-index: 50;
+    color: #fff; 
+    pointer-events: none; 
+    filter: drop-shadow(0 0 6px #000);
+}
         
         /* 범용 모달 스타일 */
         .system-modal {
@@ -656,7 +661,17 @@
             <br><br>
             <button class="btn-event-choice" style="padding:5px 15px; width:auto;" onclick="showMenu('mode-selection-area')">⬅️ 뒤로가기</button>
         </div>
-
+        <div id="single-class-select-area" style="display:none;">
+            <p style="color: #a1887f; margin-bottom: 20px;">[ 싱글 플레이 직업 선택 ]</p>
+            <div style="margin-bottom: 20px;">
+                <p style="color:#a1887f; font-size:14px; margin-bottom:10px;">내 직업 선택 (클릭)</p>
+                <div id="single-class-container" style="display:flex; flex-wrap:wrap; justify-content:center; gap:10px;"></div>
+            </div>
+    
+            <button id="btn-start-single" class="btn-danger" style="padding:15px 40px; font-size:18px; box-shadow: 0 4px 15px rgba(0,0,0,0.8); display:none;" onclick="confirmSinglePlayerStart()">모험 시작</button>
+            <br><br>
+            <button class="btn-event-choice" style="padding:5px 15px; width:auto;" onclick="showMenu('mode-selection-area')">⬅️ 뒤로가기</button>
+        </div>
         <div id="lobby-area" style="display:none;">
             <h2 style="color: var(--color-text-highlight); margin-top:0;">방 코드: <span id="display-room-code" style="color:#fff; background:#2a1e18; padding:2px 10px; border-radius:4px; letter-spacing:2px;">----</span></h2>
             <p id="lobby-status" style="color: #a1887f; margin-bottom: 20px;">친구들이 접속하기를 기다리는 중...</p>
@@ -919,26 +934,59 @@
 
     // 화면 전환 헬퍼
     function showMenu(menuId) {
-        ['mode-selection-area', 'multi-menu-area', 'lobby-area'].forEach(id => {
-            document.getElementById(id).style.display = 'none';
-        });
-        document.getElementById(menuId).style.display = 'block';
-    }
+    // single-class-select-area를 배열에 추가합니다.
+    ['mode-selection-area', 'multi-menu-area', 'lobby-area', 'single-class-select-area'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.style.display = 'none';
+    });
+    document.getElementById(menuId).style.display = 'block';
+}
 
     // [싱글 플레이 시작] (서버 통신 없이 즉시 시작)
     function startSinglePlayer() {
-        gameMode = 'single';
-        selectedClasses = ["야만인"]; 
+    gameMode = 'single';
+    showMenu('single-class-select-area'); // 직업 선택 메뉴 열기
+    renderSingleClassSelection(); // 직업 버튼 렌더링
+}
+    function renderSingleClassSelection() {
+    const container = document.getElementById('single-class-container');
+    container.innerHTML = '';
+    
+    // 선택 시작 전 시작 버튼 숨기기
+    document.getElementById('btn-start-single').style.display = 'none';
+    
+    Object.keys(HERO_TEMPLATES).forEach(cls => {
+        const btn = document.createElement('button');
+        btn.className = 'palette-btn';
+        btn.style.width = '80px'; btn.style.height = '80px';
+        btn.style.display = 'flex'; btn.style.flexDirection = 'column'; btn.style.alignItems = 'center'; btn.style.justifyContent = 'center';
+        
+        btn.innerHTML = `<div style="font-size:24px;">${HERO_TEMPLATES[cls].icon}</div><div style="font-weight:bold; font-size:12px; margin-top:5px;">${cls}</div>`;
+        
+        btn.onclick = () => {
+            // 다른 버튼들의 활성화 상태(테두리) 초기화 후 클릭한 버튼만 활성화
+            document.querySelectorAll('#single-class-container .palette-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
 
-        // 1. 모드 선택창을 즉시 닫습니다.
-        document.getElementById('intro-layout').style.display = 'none';
+            // 전역 변수에 선택한 직업 할당
+            window.selectedClasses = [cls];
+            
+            // 직업을 골랐으므로 모험 시작 버튼 노출
+            document.getElementById('btn-start-single').style.display = 'inline-block';
+        };
+        container.appendChild(btn);
+    });
+}
 
-        // 2. 이벤트를 먼저 띄우고, 유저가 이벤트 '확인/닫기'를 누르는 시점에 지도를 보여줍니다!
-        triggerRandomEvent('start', () => { 
-            switchLayout('world-map-layout');
-            renderScenarioPins(); 
-        });
-    }
+// 실제 게임 시작 (기존 startSinglePlayer에 있던 게임 로직)
+function confirmSinglePlayerStart() {
+    document.getElementById('intro-layout').style.display = 'none';
+
+    triggerRandomEvent('start', () => { 
+        switchLayout('world-map-layout');
+        renderScenarioPins(); 
+    });
+}
 
     // [방 생성]
     function createRoom() {
@@ -1016,9 +1064,9 @@
                     
                     setTimeout(() => {
                         // 1. 보상 적용
-                        if (winningChoice.gold !== undefined || (winningChoice.unlocks && winningChoice.unlocks.length > 0)) {
-                            applyEventResult(winningChoice);
-                        }
+                       if (winningChoice.gold !== undefined || (winningChoice.unlocks && winningChoice.unlocks.length > 0) || winningChoice.rogueliteUnlock) {
+        applyEventResult(winningChoice);
+    }
 
                         // 2. 연속 이벤트 확인 및 연결
                         if (winningChoice.nextEvent) {
@@ -1234,6 +1282,15 @@
     let playerGold = 0;
     let hasClearedFirstScenario = false;
     let nextBattleBuffs = { shield: 0 }; 
+    let rawSavedData = JSON.parse(localStorage.getItem('rogueliteUnlocks')) || {};
+    let rogueliteUnlocks = {
+    single: rawSavedData.single || { ominousSecret: false },
+    multi: rawSavedData.multi || { ominousSecret: false }
+    };
+
+    function saveRogueliteUnlocks() {
+    localStorage.setItem('rogueliteUnlocks', JSON.stringify(rogueliteUnlocks));
+    }
 
     function updateGoldUI() {
         document.getElementById('gold-display').innerText = playerGold;
@@ -1248,12 +1305,21 @@
             {
                 title: "불온한 존재",
                 image: "https://itimg.kr/5341/dragon.webp", 
-                text: "돌아왔군, 역시 실패했나.",
-                choices: [
-                    { text: "그게 무슨 소리죠?", nextEvent : { text: "닥쳐애미없는새끼야.", choices: [ {text: "씨발."} ]}
-                     },
-                    { text: "무시하고 길 떠난다 (+0 골드)", gold: 0, unlocks: [] }
-                ]
+                text: "..돌아왔군, 역시 실패했나.",
+                get choices() { 
+                // 💡 현재 플레이 중인 모드(gameMode)의 해금 데이터 확인
+                if (rogueliteUnlocks[gameMode].ominousSecret) {
+                    return [
+                        { text: "정체를 묻는다", nextEvent : { text: "기대도 하지 않았건만, 그 얼빠진 태도는 도통 고쳐지지 않는군. ", choices: [ {text: "그게 무슨.."} ]} },
+                        { text: "맞짱뜨자", nextEvent: { text: "뭐냐 시발. 결투 신청이냐?", choices: [{text: "계속", unlocks: [3]}] } }
+                    ];
+                } else {
+                    return [
+                        { text: "정체를 묻는다", nextEvent : { text: "기대도 하지 않았건만, 그 얼빠진 태도는 도통 고쳐지지 않는군. ", choices: [ {text: "그게 무슨.."} ]} },
+                        { text: "🔒 [잠김]", disabled: true }
+                    ];
+                }
+            }
             },
             {
                 title: "수상한 점술가",
@@ -1492,13 +1558,19 @@
             </div>
         `;
         
+        if (choice.disabled) {
+        btn.style.opacity = '0.5';
+        btn.style.cursor = 'not-allowed';
+        btn.onclick = (e) => e.stopPropagation();
+    } else {
         btn.onclick = (e) => {
             e.stopPropagation(); 
             window.dbUpdate(window.dbRef(window.firebaseDB, `rooms/${myRoomCode}/event/votes`), {
                 [myPlayerId]: idx
             });
         };
-        choicesContainer.appendChild(btn);
+    }
+    choicesContainer.appendChild(btn);
     });
 
     if (isHost) {
@@ -1587,15 +1659,22 @@
             const btn = document.createElement('button');
             btn.className = 'btn-event-choice';
             btn.innerHTML = choice.text; 
-            btn.onclick = (e) => {
-                e.stopPropagation(); 
-                if (choice.gold !== undefined || (choice.unlocks && choice.unlocks.length > 0)) {
-                    applyEventResult(choice);
-                }
-                if (choice.nextEvent) renderEventNode(choice.nextEvent, callback);
-                else if (callback) callback();
-            };
-            choicesContainer.appendChild(btn);
+           if (choice.disabled) {
+            btn.disabled = true;
+        btn.style.opacity = '0.5';
+        btn.style.cursor = 'not-allowed';
+    } else {
+        btn.onclick = (e) => {
+            e.stopPropagation(); 
+            // rogueliteUnlock 조건도 추가해 줍니다.
+            if (choice.gold !== undefined || (choice.unlocks && choice.unlocks.length > 0) || choice.rogueliteUnlock) {
+                applyEventResult(choice);
+            }
+            if (choice.nextEvent) renderEventNode(choice.nextEvent, callback);
+            else if (callback) callback();
+        };
+    }
+    choicesContainer.appendChild(btn);
         });
 
         // 4. 스킵 로직
@@ -1649,7 +1728,11 @@
                 }
             });
         }
+        if (choice.rogueliteUnlock) {
+        rogueliteUnlocks[gameMode][choice.rogueliteUnlock] = true;
+        saveRogueliteUnlocks();
     }
+}
 
     // --- 거점(상점) 시스템 ---
     function openShopModal() {
@@ -2156,7 +2239,7 @@
     
     let usedTopCardId = null; let usedBotCardId = null; let turnCards = [];
     let isEditorMode = false; let currentPalette = 'h1'; let isEliteMode = false;
-    let isMoving = false; 
+    let isMoving = false; let isAttacking = false;
 
     let editMap = { 
         cols: 8, rows: 6, 
@@ -3232,6 +3315,7 @@ mList.appendChild(div);
 
     function clearHighlights() { 
         document.querySelectorAll('.hex-tile').forEach(h => h.classList.remove('highlight-move', 'highlight-attack', 'highlight-target', 'selected-target')); 
+        document.querySelectorAll('.entity-sprite').forEach(e => e.classList.remove('target-selected-sprite'));
     }
 
     function cancelAction() { 
@@ -3242,7 +3326,7 @@ mList.appendChild(div);
     }
 
     function initiateAction(card, half) {
-        if (isMoving) return; 
+       if (isMoving || isAttacking) return;
         const hero = turnOrder[currentTurnIdx].entity;
         const action = half === 'top' ? card.top : card.bot;
 
@@ -3336,16 +3420,26 @@ mList.appendChild(div);
                     if (action.r > 1 && hexDistance(hero.x, hero.y, c, r) > 1 && !checkLineOfSight(hero.x, hero.y, c, r)) { log(`❌ 시야가 가로막혀 있습니다!`, "log-warn"); return; }
                     
                     if (action.target && action.target > 1) {
-                        const idx = window.selectedTargets.indexOf(mTarget);
-                        if (idx > -1) {
-                            window.selectedTargets.splice(idx, 1); hex.classList.remove('selected-target');
-                        } else {
-                            if (window.selectedTargets.length >= action.target) { log(`❌ 최대 타겟(${action.target}명)을 모두 선택했습니다!`, "log-warn"); return; }
-                            window.selectedTargets.push(mTarget); hex.classList.add('selected-target');
-                        }
-                        const card = turnCards.find(cd => cd.id === window.tempActiveCardId);
-                        document.getElementById('action-msg').innerHTML = `[${card.name}] 🎯대상을 선택하세요 (${window.selectedTargets.length}/${action.target}명) <button onclick="confirmMultiAttack()" class="btn-primary" style="margin-left:10px; padding:4px 8px;">선택 완료</button>`;
-                    } 
+    const idx = window.selectedTargets.indexOf(mTarget);
+    if (idx > -1) {
+        window.selectedTargets.splice(idx, 1); 
+        hex.classList.remove('selected-target');
+        
+        // 👇 추가: 선택 해제 시 몬스터 이미지에서도 체크 제거
+        const spr = document.getElementById(`sprite-${mTarget.id}`);
+        if(spr) spr.classList.remove('target-selected-sprite');
+    } else {
+        if (window.selectedTargets.length >= action.target) { log(`❌ 최대 타겟(${action.target}명)을 모두 선택했습니다!`, "log-warn"); return; }
+        window.selectedTargets.push(mTarget); 
+        hex.classList.add('selected-target');
+        
+        // 👇 추가: 선택 시 몬스터 이미지에 체크 표시 추가
+        const spr = document.getElementById(`sprite-${mTarget.id}`);
+        if(spr) spr.classList.add('target-selected-sprite');
+    }
+    const card = turnCards.find(cd => cd.id === window.tempActiveCardId);
+    document.getElementById('action-msg').innerHTML = `[${card.name}] 🎯대상을 선택하세요 (${window.selectedTargets.length}/${action.target}명) <button onclick="confirmMultiAttack()" class="btn-primary" style="margin-left:10px; padding:4px 8px;">선택 완료</button>`;
+}
                     else {
                         // 일반 공격: 정보 백업 후 일괄 엔진으로 전달
                         const savedHalf = window.tempActiveHalf;
@@ -3381,26 +3475,36 @@ mList.appendChild(div);
     }
 
     function renderPendingAoE() {
-        document.querySelectorAll('.hex-tile').forEach(h => h.classList.remove('selected-target'));
-        
-        if(!window.pendingAoE) return;
-        let { center, rotation, action } = window.pendingAoE;
-        
-        let absoluteAoE = getAbsoluteRotatedAoE(center.c, center.r, action.aoe, rotation);
+    document.querySelectorAll('.hex-tile').forEach(h => h.classList.remove('selected-target'));
+    
+    // 👇 추가: 이전 범위에 있던 몬스터들의 체크표시 초기화
+    document.querySelectorAll('.entity-sprite').forEach(e => e.classList.remove('target-selected-sprite'));
+    
+    if(!window.pendingAoE) return;
+    let { center, rotation, action } = window.pendingAoE;
+    
+    let absoluteAoE = getAbsoluteRotatedAoE(center.c, center.r, action.aoe, rotation);
 
-        absoluteAoE.forEach(pos => {
-            let tc = pos[0]; let tr = pos[1];
-            let hex = document.getElementById(`hex-board-hex-${tc}-${tr}`);
-            if (hex) hex.classList.add('selected-target'); 
-        });
+    absoluteAoE.forEach(pos => {
+        let tc = pos[0]; let tr = pos[1];
+        let hex = document.getElementById(`hex-board-hex-${tc}-${tr}`);
+        if (hex) hex.classList.add('selected-target'); 
+        
+        // 👇 추가: 해당 타일에 몬스터가 있다면 스프라이트에도 클래스 추가
+        const mTarget = monsters.find(m => m.x === tc && m.y === tr && m.hp > 0 && m.revealed && !m.conditions.invisible);
+        if (mTarget) {
+            let spr = document.getElementById(`sprite-${mTarget.id}`);
+            if (spr) spr.classList.add('target-selected-sprite');
+        }
+    });
 
-        const card = turnCards.find(cd => cd.id === window.tempActiveCardId);
-        document.getElementById('action-msg').innerHTML = 
-            `[${card.name}] 🎯 범위를 조절하세요. 
-             <button onclick="rotateAoE()" class="btn-primary" style="margin-left:10px; padding:4px 8px;">🔄 회전(R)</button>
-             <button onclick="confirmAoEAttack()" class="btn-primary" style="margin-left:5px; padding:4px 8px; background-color:#8e2424;">⚔️ 공격 확정</button>`;
-        document.getElementById('action-banner').style.display = 'flex';
-    }
+    const card = turnCards.find(cd => cd.id === window.tempActiveCardId);
+    document.getElementById('action-msg').innerHTML = 
+        `[${card.name}] 🎯 범위를 조절하세요. 
+         <button onclick="rotateAoE()" class="btn-primary" style="margin-left:10px; padding:4px 8px;">🔄 회전(R)</button>
+         <button onclick="confirmAoEAttack()" class="btn-primary" style="margin-left:5px; padding:4px 8px; background-color:#8e2424;">⚔️ 공격 확정</button>`;
+    document.getElementById('action-banner').style.display = 'flex';
+}
 
     function rotateAoE() {
         if(!window.pendingAoE) return;
@@ -3463,6 +3567,7 @@ mList.appendChild(div);
 
     // 💡 통합 공격 판정 엔진
     async function executeAttackOnTargets(targetsToAttack, action, savedHalf, savedCardId) {
+        isAttacking = true;
         const hero = turnOrder[currentTurnIdx].entity;
 
         for (const target of targetsToAttack) {
@@ -3542,6 +3647,7 @@ mList.appendChild(div);
         
         // 마킹 완료 후 턴 종료 판정 함수 호출
         checkHeroTurnEnd(); 
+        isAttacking = false;
     }
 
     function executeInstant(action) {
