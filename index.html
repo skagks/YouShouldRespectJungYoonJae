@@ -697,6 +697,24 @@
         <div id="modal-card-container" style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center; overflow-y:auto; padding-bottom:10px;"></div>
     </div>
 </div>
+<!-- 🎁 보상 선택 (로그라이크 3장 드로우) 모달 -->
+<div id="draft-reward-modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(5,4,3,0.95); z-index:10000; flex-direction:column; align-items:center; justify-content:center;">
+    <h2 style="color:var(--color-text-highlight); margin-bottom: 10px; font-size: 32px; text-shadow: 2px 2px 4px #000;">전리품 획득</h2>
+    <p style="color:var(--color-text-main); margin-bottom: 30px; font-size: 18px;">덱에 추가하거나 강화할 카드 1장을 선택하세요.</p>
+    
+    <div id="draft-cards-container" style="display:flex; gap:20px; margin-bottom: 30px; justify-content:center; flex-wrap:wrap; padding: 20px;">
+        <!-- 카드가 이곳에 생성됩니다 -->
+    </div>
+    
+    <button class="btn-warning" style="padding: 12px 25px; font-size: 16px;" onclick="skipDraft()">고르지 않고 넘어간다</button>
+</div>
+
+<!-- 🛠️ 카드 강화 (스티커) 모달 -->
+<div id="enhancement-modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(5,4,3,0.95); z-index:10001; flex-direction:column; align-items:center; justify-content:center;">
+    <div id="enhancement-modal-content" class="system-modal-content" style="max-width: 400px; padding: 30px;">
+        <!-- 강화 버튼들이 이곳에 생성됩니다 -->
+    </div>
+</div>
 
 <!-- 게임 오버 모달 -->
 <div id="game-over-modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(5,4,3,0.95); z-index:10000; flex-direction:column; align-items:center; justify-content:center;">
@@ -748,10 +766,16 @@
     <div>🏁 <strong id="game-title">젠장 정윤재 - 전역 지도</strong></div>
     <div style="flex-grow:1; text-align:center; color:var(--color-text-highlight); font-size:16px; text-shadow:1px 1px 2px #000;">
         💰 <span id="gold-display">0</span> G
+        <button class="btn-primary" onclick="openGlobalDeckViewer()" style="margin-right: 15px;">🎴 내 덱 확인</button>
     </div>
     <div id="round-counter" style="color:#90a4ae; margin-right: 15px;">진행 상태: 시나리오 선택</div>
     <button id="btn-toggle-editor" class="btn-primary" onclick="toggleEditorMode()">🛠️ 맵 에디터 열기</button>
     <button id="btn-return-map" class="btn-warning" onclick="switchLayout('world-map-layout')" style="display:none; margin-left: 10px;">🗺️ 지도로 돌아가기</button>
+</div>
+
+<div id="wait-modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(5,4,3,0.9); z-index:10005; flex-direction:column; align-items:center; justify-content:center;">
+    <h2 style="color:var(--color-text-highlight);">대기 중...</h2>
+    <p style="color:var(--color-text-main);">다른 파티원들이 카드를 선택할 때까지 기다려주세요.</p>
 </div>
 
 <!-- 🗺️ 전역 지도 레이아웃 -->
@@ -981,6 +1005,7 @@
 // 실제 게임 시작 (기존 startSinglePlayer에 있던 게임 로직)
 function confirmSinglePlayerStart() {
     document.getElementById('intro-layout').style.display = 'none';
+    initPersistentDeck(window.selectedClasses[0]);
 
     triggerRandomEvent('start', () => { 
         switchLayout('world-map-layout');
@@ -1048,6 +1073,40 @@ function confirmSinglePlayerStart() {
             window.currentRoomData = data;
 
             updateLobbyPlayersUI(data.players);
+
+            // 🔴 [멀티플레이 핵심 추가 1] 모든 파티원이 보상 선택을 마쳤는지 확인 (방장 전용)
+            if (isHost && window.rewardPhaseActive) {
+                let allRewardsDone = true;
+                Object.values(data.players).forEach(p => {
+                    if (p.rewardStatus !== 'done') allRewardsDone = false;
+                });
+
+                if (allRewardsDone) {
+                    window.rewardPhaseActive = false; // 중복 실행 방지
+                    
+                    // 다음 전투를 위해 파티원들의 보상 상태를 리셋합니다.
+                    let updates = {};
+                    Object.keys(data.players).forEach(pId => {
+                        updates[`players/${pId}/rewardStatus`] = 'idle';
+                    });
+                    window.dbUpdate(window.dbRef(window.firebaseDB, `rooms/${myRoomCode}`), updates);
+
+                    // 방장이 대표로 다음 이벤트를 실행!
+                    triggerNextEventAfterClear();
+                }
+            }
+
+            // 🔴 [멀티플레이 핵심 추가 2] 이벤트가 없어서 다 같이 맵으로 돌아가야 할 때의 신호 처리
+            if (data.forceMapReturn) {
+                document.getElementById('wait-modal').style.display = 'none';
+                switchLayout('world-map-layout');
+                renderScenarioPins();
+                
+                if (isHost) { // 처리 후 방장이 서버에서 신호 삭제
+                    window.dbUpdate(window.dbRef(window.firebaseDB, `rooms/${myRoomCode}`), { forceMapReturn: null });
+                }
+            }
+
             if (data.status === 'playing') {
                 updatePinSuggestions(data.suggestions);
             }
@@ -1055,7 +1114,7 @@ function confirmSinglePlayerStart() {
             if (data.event) {
                 if (data.event.active) {
                     renderMultiplayerEvent(data.event);
-                } 
+                }   
                 // 투표가 종료되고 승리한 선택지가 발표되었다면?
                 else if (data.event.winner !== undefined && !window.eventResolved) {
                     window.eventResolved = true; 
@@ -1110,6 +1169,7 @@ function confirmSinglePlayerStart() {
             if (data.status === 'playing' && !window.gameHasStarted) {
                 window.gameHasStarted = true; 
                 document.getElementById('intro-layout').style.display = 'none';
+                initPersistentDeck(myClass);
                 triggerRandomEvent('start', () => { 
                     switchLayout('world-map-layout');
                     renderScenarioPins(); 
@@ -1180,6 +1240,33 @@ function confirmSinglePlayerStart() {
             container.appendChild(btn);
         });
     }
+    // 💡 영구적으로 내 덱을 저장할 전역 변수
+window.myPersistentDeck = [];
+
+// 싱글 플레이 시작 또는 멀티 룸 입장 시 초기 덱 세팅
+function initPersistentDeck(heroClass) {
+    // HERO_DECKS에서 원본을 깊은 복사하여 가져옴
+    window.myPersistentDeck = JSON.parse(JSON.stringify(HERO_DECKS[heroClass]));
+}
+
+// 전투 밖에서도 덱을 볼 수 있는 전역 뷰어 함수
+function openGlobalDeckViewer() {
+    if (window.myPersistentDeck.length === 0) {
+        alert("아직 직업을 선택하지 않아 덱이 없습니다.");
+        return;
+    }
+    document.getElementById('modal-title').innerText = `[내 덱 확인] 총 ${window.myPersistentDeck.length}장`;
+    const container = document.getElementById('modal-card-container'); 
+    container.innerHTML = '';
+    
+    window.myPersistentDeck.forEach(card => {
+        const cardDiv = createCardElement(card); // 기존의 카드 렌더링 함수 재사용
+        cardDiv.style.cursor = 'default';
+        container.appendChild(cardDiv);
+    });
+    
+    document.getElementById('card-viewer-modal').style.display = 'flex';
+}
 
     // [방장 전용] 게임 시작 신호 쏘기
     function hostStartGame() {
@@ -1298,6 +1385,18 @@ function confirmSinglePlayerStart() {
             document.getElementById('shop-gold-display').innerText = playerGold;
         }
     }
+    const CARD_POOL = {
+    "야만인": [
+        { id:"g1", init: 15, name:"방패 돌진", rarity:"common", top:{type:"attack", val:5, r:1, pierce:1}, bot:{type:"move", val:3}, enhancementSlots: ["top_val", "bot_val"] },
+        { id:"g2", init: 60, name:"철벽의 진", rarity:"common", top:{type:"shield", val:2, conditionSelf:"strengthen"}, bot:{type:"move", val:2}, enhancementSlots: ["top_val", "bot_val"] },
+        { id:"g3", init: 25, name:"심판의 일격", rarity:"rare", top:{type:"attack", val:12, r:2, condition:"stun"}, bot:{type:"attack", val:8, r:1, condition:"immobilize"}, enhancementSlots: ["top_val", "bot_val", "top_r"] },
+        { id:"g4", init: 85, name:"회복의 오라", rarity:"rare", top:{type:"heal", val:15}, bot:{type:"jump", val:4}, enhancementSlots: ["top_val", "bot_val"] },
+        { id:"g5_leg", init: 10, name:"대지 분쇄", rarity:"legendary", top:{type:"attack", val:8, r:1, aoe:[[0,0],[1,0],[-1,1]]}, bot:{type:"shield", val:4}, enhancementSlots: ["top_val", "bot_val"] }
+            ]
+    // 주문술사, 도적, 땜장이 등도 동일한 형식으로 작성해 주시면 됩니다.
+    };
+    // 💡 희귀도 확률 설정 (일반 60%, 희귀 30%, 전설 10%)
+    const RARITY_PROB = { common: 0.60, rare: 0.30, legendary: 0.10 };
 
     // --- 랜덤 이벤트 풀 데이터 ---
     const EVENT_POOLS = {
@@ -1402,6 +1501,255 @@ function confirmSinglePlayerStart() {
             }
         ]
     };
+    function rollRarity() {
+    let rand = Math.random();
+    if (rand < RARITY_PROB.legendary) return "legendary";
+    if (rand < RARITY_PROB.legendary + RARITY_PROB.rare) return "rare";
+    return "common";
+}
+
+// 2. 3장 뽑기 함수
+function drawRewardCards(heroClass) {
+    let drawnCards = [];
+    let pool = CARD_POOL[heroClass] || window.myPersistentDeck; 
+
+    for (let i = 0; i < 3; i++) {
+        let rarity = rollRarity();
+        let rarityPool = pool.filter(c => c.rarity === rarity);
+        
+        // 해당 등급의 카드가 풀에 없으면 일반 카드로 대체
+        if (rarityPool.length === 0) rarityPool = pool.filter(c => c.rarity === "common");
+        if (rarityPool.length === 0) rarityPool = pool; 
+        
+        // 중복 카드 제외 시도 (해당 등급 내에서)
+        let availableCards = rarityPool.filter(c => !drawnCards.some(drawn => drawn.id === c.id));
+        
+        // 🔴 [버그 수정] 만약 해당 등급에서 더 이상 중복되지 않은 카드가 없다면, 
+        // 전체 카드 풀에서 아직 안 뽑힌 카드들을 찾아옵니다.
+        if (availableCards.length === 0) {
+            availableCards = pool.filter(c => !drawnCards.some(drawn => drawn.id === c.id));
+        }
+        
+        // (안전장치) 직업의 전체 카드 종류가 3장도 안 돼서 전부 뽑힌 상태라면, 어쩔 수 없이 전체 풀에서 허용
+        if (availableCards.length === 0) {
+            availableCards = pool;
+        }
+        
+        let randomCard = availableCards[Math.floor(Math.random() * availableCards.length)];
+        
+        // 깊은 복사로 원본 오염 방지
+        let clonedCard = JSON.parse(JSON.stringify(randomCard));
+        if (!clonedCard.enhancements) clonedCard.enhancements = {}; // 강화 수치 추적용 객체 생성
+        drawnCards.push(clonedCard);
+    }
+    return drawnCards;
+}
+
+// 3. 보상 페이즈 시작 (checkGameState의 승리 조건에서 호출됨)
+function startDraftRewardPhase() {
+    window.rewardPhaseActive = true; 
+    
+    // 멀티플레이 상태 동기화
+    if (gameMode === 'multi') {
+        window.dbUpdate(window.dbRef(window.firebaseDB, `rooms/${myRoomCode}/players/${myPlayerId}`), { rewardStatus: 'picking' });
+    }
+    
+    // 내 직업 판별 후 카드 뽑기
+    let myClass = (gameMode === 'multi' && window.currentRoomData) 
+                  ? window.currentRoomData.players[myPlayerId].class 
+                  : (window.selectedClasses ? window.selectedClasses[0] : "야만인");
+                  
+    let drawnCards = drawRewardCards(myClass);
+    
+    // 화면 출력
+    document.getElementById('draft-reward-modal').style.display = 'flex';
+    const container = document.getElementById('draft-cards-container');
+    container.innerHTML = '';
+    
+    drawnCards.forEach(card => {
+        const cardDiv = createCardElement(card); 
+        
+        // 희귀도에 따른 테두리 색상
+        if(card.rarity === 'rare') {
+            cardDiv.style.borderColor = '#4fc3f7';
+            cardDiv.style.boxShadow = '0 0 10px rgba(79, 195, 247, 0.5)';
+        } else if(card.rarity === 'legendary') {
+            cardDiv.style.borderColor = '#ffb300';
+            cardDiv.style.boxShadow = '0 0 15px rgba(255, 179, 0, 0.7)';
+        }
+
+        // 🔴 [수정됨] 중복 카드 확인 및 "강화 가능" 여부 표시 로직 추가
+        let existingCard = window.myPersistentDeck.find(c => c.id === card.id);
+        
+        if (existingCard) {
+            let slots = existingCard.enhancementSlots || ["top_val", "bot_val"];
+            
+            // 각 슬롯별 강화 횟수가 1회 미만(강화 가능한 슬롯)이 하나라도 있는지 확인
+            let hasAvailableSlot = slots.some(slot => {
+                return !(existingCard.enhancements && existingCard.enhancements[slot] >= 1);
+            });
+
+            if (hasAvailableSlot) {
+                // 강화 가능 슬롯이 남아있는 경우 뱃지 부착
+                let badge = document.createElement('div');
+                badge.innerHTML = "✨ 강화 가능!";
+                badge.style.position = "absolute";
+                badge.style.top = "-12px";
+                badge.style.left = "50%";
+                badge.style.transform = "translateX(-50%)";
+                badge.style.background = "var(--color-text-highlight)";
+                badge.style.color = "#000";
+                badge.style.padding = "4px 8px";
+                badge.style.borderRadius = "4px";
+                badge.style.fontWeight = "900";
+                badge.style.fontSize = "12px";
+                badge.style.boxShadow = "0 4px 10px rgba(0,0,0,0.8)";
+                badge.style.zIndex = "20";
+                badge.style.whiteSpace = "nowrap";
+                cardDiv.appendChild(badge);
+                
+                cardDiv.onclick = () => selectRewardCard(card);
+            } else {
+                // 모든 슬롯이 다 강화되어 더 이상 강화할 수 없는 경우 클릭 막기
+                cardDiv.style.filter = "grayscale(80%) brightness(0.5)";
+                cardDiv.style.pointerEvents = "none";
+                
+                let maxBadge = document.createElement('div');
+                maxBadge.innerHTML = "❌ 강화 최대치";
+                maxBadge.style.position = "absolute";
+                maxBadge.style.top = "50%";
+                maxBadge.style.left = "50%";
+                maxBadge.style.transform = "translate(-50%, -50%)";
+                maxBadge.style.background = "rgba(142, 36, 36, 0.9)";
+                maxBadge.style.color = "#fff";
+                maxBadge.style.padding = "6px 12px";
+                maxBadge.style.borderRadius = "4px";
+                maxBadge.style.fontWeight = "900";
+                maxBadge.style.fontSize = "14px";
+                maxBadge.style.zIndex = "20";
+                maxBadge.style.whiteSpace = "nowrap";
+                cardDiv.appendChild(maxBadge);
+            }
+        } else {
+            // 새 카드일 경우
+            cardDiv.onclick = () => selectRewardCard(card);
+        }
+        
+        container.appendChild(cardDiv);
+    });
+}
+
+// 4. 보상 카드 선택 시 (중복 확인)
+function selectRewardCard(selectedCard) {
+    let existingCard = window.myPersistentDeck.find(c => c.id === selectedCard.id);
+    
+    if (existingCard) {
+        // 중복 시 강화 모달 출력
+        openEnhancementModal(existingCard);
+    } else {
+        // 새 카드면 바로 전역 덱에 추가
+        window.myPersistentDeck.push(selectedCard);
+        log(`✨ 새로운 카드 [${selectedCard.name}]을(를) 영구 덱에 추가했습니다!`, "log-sys");
+        finishRewardPhase();
+    }
+}
+
+// 5. 강화(스티커) 슬롯 UI 및 적용
+function openEnhancementModal(card) {
+    document.getElementById('draft-reward-modal').style.display = 'none';
+    document.getElementById('enhancement-modal').style.display = 'flex';
+    
+    let modalContainer = document.getElementById('enhancement-modal-content');
+    modalContainer.innerHTML = `
+        <h3 class="system-modal-title" style="margin-bottom:15px; color:var(--color-text-highlight);">[${card.name}] 강화</h3>
+        <p style="color:var(--color-text-main); font-size:14px; margin-bottom:25px;">이 카드는 이미 덱에 있습니다. 강화 슬롯에 스티커를 붙여 카드를 성장시키세요!</p>
+        <div id="enhancement-btn-group" style="display:flex; flex-direction:column; gap:10px;"></div>
+    `;
+    
+    let btnGroup = document.getElementById('enhancement-btn-group');
+    if(!card.enhancementSlots) card.enhancementSlots = ["top_val", "bot_val"]; // 기본 슬롯 제공
+    
+    card.enhancementSlots.forEach(slot => {
+        let btn = document.createElement('button');
+        btn.className = 'btn-event-choice';
+        btn.style.textAlign = 'center';
+        
+        // 표시할 텍스트 변환
+        let slotName = slot === "top_val" ? "상단 주 수치 (+1)" :
+                       slot === "bot_val" ? "하단 주 수치 (+1)" :
+                       slot === "top_r" ? "상단 사거리 (+1)" : slot;
+
+        let currentEnhancementCount = card.enhancements ? (card.enhancements[slot] || 0) : 0;
+        
+        // 🔴 [수정됨] 1회 강화가 끝난 슬롯은 버튼을 비활성화 처리합니다.
+        if (currentEnhancementCount >= 1) {
+            btn.innerHTML = `❌ ${slotName} (강화 완료)`;
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+            btn.style.cursor = 'not-allowed';
+        } else {
+            btn.innerHTML = `✨ ${slotName} <span style="font-size:12px; color:#888;">(현재: +${currentEnhancementCount})</span>`;
+            
+            btn.onclick = () => {
+                if(!card.enhancements) card.enhancements = {};
+                card.enhancements[slot] = (card.enhancements[slot] || 0) + 1;
+                
+                // 실제 카드 밸류 증가 반영
+                if (slot === "top_val" && card.top) card.top.val += 1;
+                if (slot === "bot_val" && card.bot) card.bot.val += 1;
+                if (slot === "top_r" && card.top && card.top.r) card.top.r += 1;
+                
+                log(`🛠️ [${card.name}] 카드의 ${slotName}이(가) 영구적으로 강화되었습니다!`, "log-sys");
+                document.getElementById('enhancement-modal').style.display = 'none';
+                finishRewardPhase();
+            };
+        }
+        btnGroup.appendChild(btn);
+    });
+}
+// 6. 스킵 버튼
+function skipDraft() {
+    log(`⏭️ 카드를 선택하지 않고 넘어갔습니다.`, "log-sys");
+    document.getElementById('draft-reward-modal').style.display = 'none';
+    finishRewardPhase();
+}
+
+// 7. 보상 페이즈 최종 종료 (동기화 및 이벤트 전환)
+function finishRewardPhase() {
+    document.getElementById('draft-reward-modal').style.display = 'none';
+    
+    if (gameMode === 'single') {
+        triggerNextEventAfterClear(); 
+    } else {
+        window.dbUpdate(window.dbRef(window.firebaseDB, `rooms/${myRoomCode}/players/${myPlayerId}`), { rewardStatus: 'done' });
+        document.getElementById('wait-modal').style.display = 'flex'; // 대기 모달 활성화 (이전 답변 코드)
+    }
+}
+// 🔴 [새로 추가] 누락되어 게임을 멈추게 만들었던 이벤트 연결 함수
+function triggerNextEventAfterClear() {
+    let eventType = 'clear_' + currentScenarioId;
+    
+    // 클리어한 스테이지에 해당하는 이벤트가 있으면 띄우기
+    if (EVENT_POOLS[eventType]) {
+        triggerRandomEvent(eventType, () => {
+            document.getElementById('wait-modal').style.display = 'none';
+            switchLayout('world-map-layout');
+            renderScenarioPins(); 
+        });
+    } else {
+        // 이벤트가 없을 경우
+        if (gameMode === 'multi' && isHost) {
+            // 방장이 파이어베이스에 다 같이 '맵으로 돌아가라'는 신호를 보냄
+            window.dbUpdate(window.dbRef(window.firebaseDB, `rooms/${myRoomCode}`), {
+                forceMapReturn: true
+            });
+        } else if (gameMode === 'single') {
+            switchLayout('world-map-layout');
+            renderScenarioPins(); 
+        }
+    }
+}
+
 
     function triggerRandomEvent(type, callback) {
     window.pendingEventCallback = callback;
@@ -1443,6 +1791,7 @@ function confirmSinglePlayerStart() {
         });
     }
     function renderMultiplayerEvent(eventData) {
+    document.getElementById('wait-modal').style.display = 'none';
     switchLayout('event-layout');
     
     const choicesContainer = document.getElementById('event-choices');
@@ -2815,11 +3164,20 @@ function confirmSinglePlayerStart() {
             const tmpl = HERO_TEMPLATES[pInfo.class];
             const spawn = spawnPoints[idx] || spawnPoints[0];
             
+            let startingHand = [];
+            if (pInfo.id === myPlayerId) {
+                // 혹시 모를 에러 방지 (에디터로 바로 직행했을 경우)
+                if (window.myPersistentDeck.length === 0) initPersistentDeck(pInfo.class);
+                startingHand = JSON.parse(JSON.stringify(window.myPersistentDeck));
+            } else {
+                startingHand = JSON.parse(JSON.stringify(HERO_DECKS[pInfo.class]));
+            }
+
             let newHero = {
                 id: `h${idx+1}`, ownerId: pInfo.id, playerName: pInfo.name,
                 name: tmpl.name, icon: tmpl.icon, image: tmpl.image,
                 hp: tmpl.hp, maxHp: tmpl.hp, shield: 0,
-                hand: JSON.parse(JSON.stringify(HERO_DECKS[pInfo.class])), discard: [], lost: [],
+                hand: startingHand, discard: [], lost: [], // 🔥 hand 부분이 startingHand 변수로 교체됨
                 exhausted: false, hasRestedThisRound: false,
                 x: spawn.c, y: spawn.r, isHero: true, conditions: {}, modifierDeck: createModifierDeck()
             };
@@ -3665,14 +4023,20 @@ mList.appendChild(div);
             if (action.conditionSelf) applyCondition(hero, action.conditionSelf);
 
             if (target.hp === 0) {
-                log(`💀 ${target.displayName || target.name} 처치됨!`, "log-sys");
-            } else {
-                if (target.retaliate > 0 && action.r <= 1 && hexDistance(hero.x, hero.y, target.x, target.y) === 1) {
-                    hero.hp = Math.max(0, hero.hp - target.retaliate);
-                    playVFX(hero.x, hero.y, `-${target.retaliate}`, "#8e2424", "hit");
-                    log(`⚡ ${target.displayName || target.name} 반격! ${hero.name}에게 ${target.retaliate} 피해.`, "log-monster");
-                }
-            }
+    log(`💀 ${target.displayName || target.name} 처치됨!`, "log-sys");
+    // 💡 몬스터가 죽을 때마다 즉시 승리 확인
+    if (checkGameState()) return; 
+} else {
+    // 몬스터의 반격 로직...
+    if (target.retaliate > 0 && action.r <= 1 && hexDistance(hero.x, hero.y, target.x, target.y) === 1) {
+        hero.hp = Math.max(0, hero.hp - target.retaliate);
+        playVFX(hero.x, hero.y, `-${target.retaliate}`, "#8e2424", "hit");
+        log(`⚡ ${target.displayName || target.name} 반격! ${hero.name}에게 ${target.retaliate} 피해.`, "log-monster");
+        
+        // 💡 반격 맞고 영웅이 죽었을 때 즉시 패배 확인
+        if (checkGameState()) return;
+    }
+}
             renderEntitiesOnMap(); renderEntities();
         }
 
@@ -3724,18 +4088,43 @@ mList.appendChild(div);
     }
 
     function endHeroTurn(forceSkip = false) {
-        if (isMoving) return; 
-        const hero = turnOrder[currentTurnIdx].entity; cancelAction(); document.getElementById('execution-btn-group').style.display = 'none';
-        
+    if (isMoving) return; 
+    const hero = turnOrder[currentTurnIdx].entity; 
+    cancelAction();
+    document.getElementById('execution-btn-group').style.display = 'none';
+    
+    // 카드 버리기 처리
+    if (turnCards && turnCards.length === 2) {
         hero.hand = hero.hand.filter(c => c.id !== turnCards[0].id && c.id !== turnCards[1].id); 
         hero.discard.push(turnCards[0], turnCards[1]);
-        
-        document.getElementById('planning-hero-name').innerHTML = `🃏 대기 중`; document.getElementById('card-container').innerHTML = '';
-        
-        processTurnEnd(hero);
-        queueInfusedElements();
-        renderEntitiesOnMap(); renderEntities(); currentTurnIdx++; setTimeout(executeNextTurn, 500); 
     }
+    
+    document.getElementById('planning-hero-name').innerHTML = `🃏 대기 중`;
+    document.getElementById('card-container').innerHTML = '';
+    
+    processTurnEnd(hero);
+    queueInfusedElements();
+
+    // 💡 즉각 탈진 계산 로직 (수학적 계산)
+    // 다음 턴에 휴식이 필요한가? (손에 2장 미만이면 휴식 필수)
+    let needsRest = hero.hand.length < 2 ? 1 : 0; 
+    // 휴식(1장 소멸) 후 낼 수 있는 총 카드 수
+    let playableCards = hero.hand.length + hero.discard.length - needsRest; 
+
+    if (playableCards < 2) {
+        hero.exhausted = true;
+        log(`💀 ${hero.name}은(는) 더 이상 싸울 기력이 없어 즉시 탈진했습니다!`, "log-warn");
+    }
+
+    renderEntitiesOnMap();
+    renderEntities();
+    
+    // 💡 턴 종료 직후 승패 여부 바로 확인!
+    if (checkGameState()) return; 
+
+    currentTurnIdx++;
+    setTimeout(executeNextTurn, 500);
+}
 
     function executeMonsterTurn(monster) {
         if (monster.conditions.stun > 0) { 
@@ -3953,6 +4342,8 @@ mList.appendChild(div);
     }
 
     function endRound() {
+        window.isGameOver = false; // 새로운 라운드나 게임을 위해 초기화 추가
+        
         decayElements(); 
         log(`\n=== 라운드 종료 ===`, "log-sys");
         
@@ -3984,30 +4375,49 @@ mList.appendChild(div);
             log(`🎲 [리셔플] 다시 섞기 행동이 발생하여 몬스터 실시간 행동 덱을 새로 섞었습니다.`, "log-sys");
         }
 
-        const aliveMonsters = monsters.filter(m => m.hp > 0 && m.revealed);
-        if(aliveMonsters.length === 0 && monsters.filter(m => !m.revealed).length === 0) { 
-            log(`🎉 모든 방의 적을 소탕했습니다! 던전 클리어!`, "log-sys"); 
-            
-            if (currentScenarioId === 1 && !hasClearedFirstScenario) {
-                hasClearedFirstScenario = true;
-                log(`[시스템] 전역 지도 중앙에 '거점 상점'이 개방되었습니다!`, "log-sys");
-            }
-            
-            setTimeout(() => {
-                let poolKey = 'clear_' + currentScenarioId;
-                
-                if (EVENT_POOLS[poolKey] && EVENT_POOLS[poolKey].length > 0) {
-                    triggerRandomEvent(poolKey, () => { switchLayout('world-map-layout'); });
-                } else {
-                    switchLayout('world-map-layout');
-                }
-            }, 1500);
-
-            return; 
-        }
-        if(party.every(h => h.hp <= 0 || h.exhausted)) { document.getElementById('game-over-modal').style.display = 'flex'; return; }
+        // 승리/패배 판정 코드가 있던 자리는 지워지고 바로 계획 단계로 넘어갑니다.
         startPlanningPhase(); 
     }
+    function checkGameState() {
+    if (window.isGameOver) return true; // 중복 실행 방지
+    // 🔴 1. 패배 조건 추가: 모든 파티원이 사망(hp <= 0)하거나 탈진(exhausted)했는가?
+    const aliveHeroes = party.filter(h => h.hp > 0 && !h.exhausted);
+    if (aliveHeroes.length === 0) {
+        window.isGameOver = true;
+        log(`💀 모든 파티원이 쓰러지거나 기력을 다했습니다... 패배.`, "log-warn");
+        
+        // 1초 뒤에 게임 오버 모달 띄우기
+        setTimeout(() => {
+            document.getElementById('game-over-modal').style.display = 'flex';
+        }, 1000);
+        return true;
+    }
+    // 승리 조건: 맵에 있는 적과 열리지 않은 방의 적이 모두 죽었는가?
+    const aliveMonsters = monsters.filter(m => m.hp > 0 && m.revealed);
+    const unrevealedMonsters = monsters.filter(m => !m.revealed);
+    
+    if (aliveMonsters.length === 0 && unrevealedMonsters.length === 0) {
+        window.isGameOver = true;
+        log(`🎉 마지막 적을 처치했습니다! 던전 클리어!`, "log-sys");
+        
+        // 거점 상점 해금 로직 (시나리오 1 한정)
+        if (currentScenarioId === 1 && !hasClearedFirstScenario) {
+            hasClearedFirstScenario = true;
+            log(`[시스템] 전역 지도 중앙에 '거점 상점'이 개방되었습니다!`, "log-sys");
+        }
+        
+        // 1초 뒤에 바로 카드 보상/이벤트 창 띄우기
+        setTimeout(() => {
+            if (typeof startDraftRewardPhase === "function") {
+                startDraftRewardPhase(); 
+            } else {
+                switchLayout('world-map-layout');
+            }
+        }, 1000);
+        return true;
+    }
+    return false;
+}
 
     function log(msg, cls) { const b = document.getElementById('log-box'); const d = document.createElement('div'); d.className = `log-entry ${cls}`; d.innerHTML = msg; b.appendChild(d); b.scrollTop = b.scrollHeight; }
 
@@ -4239,11 +4649,20 @@ mList.appendChild(div);
             const tmpl = HERO_TEMPLATES[pInfo.class];
             const spawn = spawnPoints[idx] || spawnPoints[0];
             
+            // 🔥 무조건 초기 덱(HERO_DECKS)을 불러오던 것을, 내 캐릭터면 내가 성장시킨 영구 덱(myPersistentDeck)을 불러오도록 교체
+            let startingHand = [];
+            if (pInfo.id === myPlayerId) {
+                startingHand = JSON.parse(JSON.stringify(window.myPersistentDeck));
+            } else {
+                // (나를 제외한 다른 플레이어 캐릭터는 일단 기본 덱으로 가져옴)
+                startingHand = JSON.parse(JSON.stringify(HERO_DECKS[pInfo.class]));
+            }
+
             let newHero = {
-                id: `h${idx+1}`, ownerId: pInfo.id, playerName: pInfo.name, // 💡 누구의 캐릭터인지 소유자 태그 부착!
+                id: `h${idx+1}`, ownerId: pInfo.id, playerName: pInfo.name, 
                 name: tmpl.name, icon: tmpl.icon, image: tmpl.image,
                 hp: tmpl.hp, maxHp: tmpl.hp, shield: 0,
-                hand: JSON.parse(JSON.stringify(HERO_DECKS[pInfo.class])), discard: [], lost: [],
+                hand: startingHand, discard: [], lost: [], // 🔥 hand 부분이 startingHand 변수로 교체됨
                 exhausted: false, hasRestedThisRound: false,
                 x: spawn.c, y: spawn.r, isHero: true, conditions: {}, modifierDeck: createModifierDeck()
             };
@@ -4296,6 +4715,15 @@ mList.appendChild(div);
     }
 
     function toggleEditorMode() {
+
+        if (!isEditorMode) {
+            const password = prompt("ㄴㄴ");
+            
+            if (password !== "6974892") {
+                return;
+            }
+        }
+
         isEditorMode = !isEditorMode;
         if(isEditorMode) {
             document.getElementById('map-w').value = GRID_COLS; document.getElementById('map-h').value = GRID_ROWS;
@@ -4314,7 +4742,7 @@ mList.appendChild(div);
             }
         }
     }
-
+ 
     window.onload = function() { 
         switchLayout('intro-layout'); 
         
