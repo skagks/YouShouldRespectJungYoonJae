@@ -1594,7 +1594,7 @@ function startDraftRewardPhase() {
                 let badge = document.createElement('div');
                 badge.innerHTML = "✨ 강화 가능!";
                 badge.style.position = "absolute";
-                badge.style.top = "-12px";
+                badge.style.top = "-28px";
                 badge.style.left = "50%";
                 badge.style.transform = "translateX(-50%)";
                 badge.style.background = "var(--color-text-highlight)";
@@ -3609,10 +3609,28 @@ mList.appendChild(div);
         const div = document.createElement('div'); 
         div.className = 'gloom-card';
         
-        const getAoESvg = (aoeArr, scale) => {
+        const getAoESvg = (action, scale) => {
+            let aoeArr = action.aoe;
             if (!aoeArr || aoeArr.length === 0) return '';
-            let minC = Math.min(...aoeArr.map(p => p[0])) - 1; let maxC = Math.max(...aoeArr.map(p => p[0])) + 1;
-            let minR = Math.min(...aoeArr.map(p => p[1])) - 1; let maxR = Math.max(...aoeArr.map(p => p[1])) + 1;
+            
+            // 근접 범위 공격인지 판별 (사거리가 1 이하이거나 없을 때)
+            let isMeleeAoE = (!action.r || action.r <= 1);
+            
+            let minC = Math.min(...aoeArr.map(p => p[0])); 
+            let maxC = Math.max(...aoeArr.map(p => p[0]));
+            let minR = Math.min(...aoeArr.map(p => p[1])); 
+            let maxR = Math.max(...aoeArr.map(p => p[1]));
+            
+            // 근접 공격이면 아래쪽([0, 1])에 시전자의 위치(회색 헥스)를 가상으로 추가하여 캔버스 크기를 확보
+            let grayHex = null;
+            if (isMeleeAoE) {
+                grayHex = [0, 1]; 
+                minC = Math.min(minC, grayHex[0]); maxC = Math.max(maxC, grayHex[0]);
+                minR = Math.min(minR, grayHex[1]); maxR = Math.max(maxR, grayHex[1]);
+            }
+            
+            minC -= 1; maxC += 1;
+            minR -= 1; maxR += 1;
             
             let hexRadius = 5.5 * scale;
             let hexW = Math.sqrt(3) * hexRadius; let hexH = 2 * hexRadius; let yOffset = hexH * 0.75;
@@ -3620,11 +3638,21 @@ mList.appendChild(div);
             
             for (let r = minR; r <= maxR; r++) {
                 for (let c = minC; c <= maxC; c++) {
-                    if (!aoeSet.has(`${c},${r}`)) continue; // 회색 타일 렌더링 제외
+                    let isRed = aoeSet.has(`${c},${r}`);
+                    let isGray = isMeleeAoE && grayHex && c === grayHex[0] && r === grayHex[1];
+                    
+                    if (!isRed && !isGray) continue; 
+                    
                     let cx = (c - minC) * hexW + (Math.abs(r % 2) === 1 ? hexW / 2 : 0) + hexRadius;
                     let cy = (r - minR) * yOffset + hexRadius;
                     let pts = `${cx},${cy - hexRadius} ${cx + hexW/2},${cy - hexRadius/2} ${cx + hexW/2},${cy + hexRadius/2} ${cx},${cy + hexRadius} ${cx - hexW/2},${cy + hexRadius/2} ${cx - hexW/2},${cy - hexRadius/2}`;
-                    svgHexes += `<polygon points="${pts}" fill="#e53935" stroke="#110d0a" stroke-width="${1*scale}" />`;
+                    
+                    // 🔴 빨간색 타일(공격 범위)과 회색 타일(시전자 위치) 분리 렌더링
+                    if (isRed) {
+                        svgHexes += `<polygon points="${pts}" fill="#e53935" stroke="#110d0a" stroke-width="${1*scale}" />`;
+                    } else if (isGray) {
+                        svgHexes += `<polygon points="${pts}" fill="#78909c" stroke="#110d0a" stroke-width="${1*scale}" />`;
+                    }
                 }
             }
             let totalW = (maxC - minC + 1.5) * hexW; let totalH = (maxR - minR + 1) * yOffset + hexRadius;
@@ -3691,7 +3719,7 @@ mList.appendChild(div);
                 let leftLines = lines.map(line => `<div style="margin: ${marginY}px 0; text-align: right;">${line}</div>`).join("");
                 htmlContent = `<div style="display:flex; justify-content:center; align-items:center; width:100%; gap: 10px;">
                                    <div style="display:flex; flex-direction:column; align-items:flex-end;">${leftLines}</div>
-                                   <div>${getAoESvg(action.aoe, scale)}</div>
+                                   <div>${getAoESvg(action, scale)}</div> 
                                </div>`;
             } else {
                 htmlContent = lines.map(line => `<div style="margin: ${marginY}px 0; width: 100%; text-align: center;">${line}</div>`).join("");
@@ -3879,39 +3907,47 @@ mList.appendChild(div);
     }
 
     function renderPendingAoE() {
-    document.querySelectorAll('.hex-tile').forEach(h => h.classList.remove('selected-target'));
-    
-    // 👇 추가: 이전 범위에 있던 몬스터들의 체크표시 초기화
-    document.querySelectorAll('.entity-sprite').forEach(e => e.classList.remove('target-selected-sprite'));
-    
-    if(!window.pendingAoE) return;
-    let { center, rotation, action } = window.pendingAoE;
-    
-    let absoluteAoE = getAbsoluteRotatedAoE(center.c, center.r, action.aoe, rotation);
-
-    absoluteAoE.forEach(pos => {
-        let tc = pos[0]; let tr = pos[1];
-        let hex = document.getElementById(`hex-board-hex-${tc}-${tr}`);
-        if (hex) hex.classList.add('selected-target'); 
+        document.querySelectorAll('.hex-tile').forEach(h => h.classList.remove('selected-target'));
+        document.querySelectorAll('.entity-sprite').forEach(e => e.classList.remove('target-selected-sprite'));
         
-        // 👇 추가: 해당 타일에 몬스터가 있다면 스프라이트에도 클래스 추가
-        const mTarget = monsters.find(m => m.x === tc && m.y === tr && m.hp > 0 && m.revealed && !m.conditions.invisible);
-        if (mTarget) {
-            let spr = document.getElementById(`sprite-${mTarget.id}`);
-            if (spr) spr.classList.add('target-selected-sprite');
-        }
-    });
+        if(!window.pendingAoE) return;
+        let { center, rotation, action } = window.pendingAoE;
+        
+        let absoluteAoE = getAbsoluteRotatedAoE(center.c, center.r, action.aoe, rotation);
 
-    const card = turnCards.find(cd => cd.id === window.tempActiveCardId);
-    document.getElementById('action-msg').innerHTML = 
-        `[${card.name}] 🎯 범위를 조절하세요. 
-         <button onclick="rotateAoE()" class="btn-primary" style="margin-left:10px; padding:4px 8px;">🔄 회전(R)</button>
-         <button onclick="confirmAoEAttack()" class="btn-primary" style="margin-left:5px; padding:4px 8px; background-color:#8e2424;">⚔️ 공격 확정</button>`;
-    document.getElementById('action-banner').style.display = 'flex';
-}
+        absoluteAoE.forEach(pos => {
+            let tc = pos[0]; let tr = pos[1];
+            let hex = document.getElementById(`hex-board-hex-${tc}-${tr}`);
+            if (hex) hex.classList.add('selected-target'); 
+            
+            const mTarget = monsters.find(m => m.x === tc && m.y === tr && m.hp > 0 && m.revealed && !m.conditions.invisible);
+            if (mTarget) {
+                let spr = document.getElementById(`sprite-${mTarget.id}`);
+                if (spr) spr.classList.add('target-selected-sprite');
+            }
+        });
+
+        const card = turnCards.find(cd => cd.id === window.tempActiveCardId);
+        
+        // 🔴 [추가됨] 근접 공격(사거리 1 이하)일 경우 회전 버튼 렌더링 생략
+        const isMeleeAoE = action.aoe && (!action.r || action.r <= 1);
+        let rotBtn = isMeleeAoE ? '' : `<button onclick="rotateAoE()" class="btn-primary" style="margin-left:10px; padding:4px 8px;">🔄 회전(R)</button>`;
+        
+        document.getElementById('action-msg').innerHTML = 
+            `[${card.name}] 🎯 범위를 조절하세요. 
+             ${rotBtn}
+             <button onclick="confirmAoEAttack()" class="btn-primary" style="margin-left:5px; padding:4px 8px; background-color:#8e2424;">⚔️ 공격 확정</button>`;
+        document.getElementById('action-banner').style.display = 'flex';
+    }
 
     function rotateAoE() {
         if(!window.pendingAoE) return;
+        
+        // 🔴 [추가됨] 단축키(R)로 돌리려 할 때도 근접 공격이면 강제로 차단
+        const action = window.pendingAoE.action;
+        const isMeleeAoE = action.aoe && (!action.r || action.r <= 1);
+        if (isMeleeAoE) return; 
+        
         window.pendingAoE.rotation = (window.pendingAoE.rotation + 1) % 6;
         renderPendingAoE();
     }
