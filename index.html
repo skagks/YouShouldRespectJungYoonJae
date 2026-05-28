@@ -2114,10 +2114,10 @@ function confirmSinglePlayerStart() {
 
     // @@@@@@@@@@@@@@@@@@@@@@ 몬스터 정보,카드 / 영웅 정보, 카드 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@
     const HERO_TEMPLATES = {
-        "야만인": { name: "야만인", icon: "🪓", image: "https://itimg.kr/5341/brute.jpg", hp: 12 },
+        "야만인": { name: "야만인", icon: "🪓", image: "https://itimg.kr/5341/brute.jpg", hp: 10 },
         "주문술사": { name: "주문술사", icon: "🧙‍♀️", image: "https://itimg.kr/5341/mage.webp", hp: 6 },
         "도적": { name: "도적", icon: "🗡️", image: "", hp: 8 },
-        "땜장이": { name: "땜장이", icon: "⚙️", image: "", hp: 9 }
+        "땜장이": { name: "땜장이", icon: "⚙️", image: "", hp: 6 }
     };
 
     // 💡 직업별 카드 덱
@@ -2788,9 +2788,55 @@ function confirmSinglePlayerStart() {
         pendingInfusions = [];
         renderElementsUI();
         
-        if (editMap.heroes.h1) party.push({ id:"h1", name:"야만인", icon:"🪓", image:"https://itimg.kr/5341/brute.jpg", hp:10, maxHp:10, shield:0, hand:[], discard:[], lost:[], exhausted:false, hasRestedThisRound:false, x:editMap.heroes.h1.c, y:editMap.heroes.h1.r, isHero:true, conditions:{}, modifierDeck:createModifierDeck() });
-        if (editMap.heroes.h2) party.push({ id:"h2", name:"주문술사", icon:"🧙‍♀️", image:"https://itimg.kr/5341/mage.webp", hp:6, maxHp:6, shield:0, hand:[], discard:[], lost:[], exhausted:false, hasRestedThisRound:false, x:editMap.heroes.h2.c, y:editMap.heroes.h2.r, isHero:true, conditions:{}, modifierDeck:createModifierDeck() });
-        party.forEach(h => { h.hand = JSON.parse(JSON.stringify(HERO_DECKS[h.name])); Object.keys(COND_MAP).forEach(k => h.conditions[k] = 0); h.conditions.poison = false; h.conditions.wound = false; });
+        // 1. 에디터 맵에 배치된 영웅 스폰 위치 확보
+        let spawnPoints = [];
+        if (editMap.heroes.h1) spawnPoints.push(editMap.heroes.h1);
+        if (editMap.heroes.h2) spawnPoints.push(editMap.heroes.h2);
+        if (editMap.heroes.h3) spawnPoints.push(editMap.heroes.h3);
+
+        // 스폰 지점이 하나도 지정되지 않았다면 (0, 0)을 기본값으로 사용
+        if (spawnPoints.length === 0) spawnPoints.push({c: 0, r: 0});
+
+        // 2. 현재 플레이 모드에 맞춰 유저 정보 로드 (멀티/싱글)
+        let playerInfos = [];
+        if (gameMode === 'multi' && window.currentRoomData) {
+            playerInfos = Object.keys(window.currentRoomData.players).map(pid => {
+                return { id: pid, name: window.currentRoomData.players[pid].name, class: window.currentRoomData.players[pid].class };
+            }).filter(p => p.class !== '선택 중...');
+        } else {
+            // 싱글 플레이 또는 시작화면 안 거친 강제 시작 시
+            let myClass = (window.selectedClasses && window.selectedClasses.length > 0) ? window.selectedClasses[0] : "야만인";
+            playerInfos = [{ id: myPlayerId, name: "나", class: myClass }];
+        }
+
+        // 3. 맵에 실제 영웅 인스턴스 생성 및 싱글 버프 적용
+        playerInfos.forEach((pInfo, idx) => {
+            if (!HERO_TEMPLATES[pInfo.class]) return;
+            const tmpl = HERO_TEMPLATES[pInfo.class];
+            const spawn = spawnPoints[idx] || spawnPoints[0];
+            
+            let newHero = {
+                id: `h${idx+1}`, ownerId: pInfo.id, playerName: pInfo.name,
+                name: tmpl.name, icon: tmpl.icon, image: tmpl.image,
+                hp: tmpl.hp, maxHp: tmpl.hp, shield: 0,
+                hand: JSON.parse(JSON.stringify(HERO_DECKS[pInfo.class])), discard: [], lost: [],
+                exhausted: false, hasRestedThisRound: false,
+                x: spawn.c, y: spawn.r, isHero: true, conditions: {}, modifierDeck: createModifierDeck()
+            };
+
+            // 싱글 플레이(1인) 모드일 경우: 체력, 공격력 2배 강화
+            if (gameMode === 'single') { 
+                newHero.hp *= 2; newHero.maxHp *= 2;
+                newHero.hand.forEach(card => {
+                    if (card.top && card.top.type === 'attack') card.top.val *= 2;
+                    if (card.bot && card.bot.type === 'attack') card.bot.val *= 2;
+                });
+            }
+            
+            Object.keys(COND_MAP).forEach(k => newHero.conditions[k] = 0);
+            newHero.conditions.poison = false; newHero.conditions.wound = false;
+            party.push(newHero);
+        });
 
         let counts = {};
         (editMap.monsters || []).forEach((m, idx) => {
@@ -4031,6 +4077,7 @@ mList.appendChild(div);
                 editMap.voidTiles.push({c, r}); 
                 if (editMap.heroes.h1 && editMap.heroes.h1.c === c && editMap.heroes.h1.r === r) delete editMap.heroes.h1;
                 if (editMap.heroes.h2 && editMap.heroes.h2.c === c && editMap.heroes.h2.r === r) delete editMap.heroes.h2;
+                if (editMap.heroes.h3 && editMap.heroes.h3.c === c && editMap.heroes.h3.r === r) delete editMap.heroes.h3; // 영웅3 지우기
                 editMap.monsters = editMap.monsters.filter(m => !(m.c === c && m.r === r));
                 editMap.obstacles = editMap.obstacles.filter(o => !(o.c === c && o.r === r));
                 editMap.traps = editMap.traps.filter(t => !(t.c === c && t.r === r));
@@ -4053,6 +4100,7 @@ mList.appendChild(div);
 
             if (editMap.heroes.h1 && editMap.heroes.h1.c === c && editMap.heroes.h1.r === r) delete editMap.heroes.h1;
             if (editMap.heroes.h2 && editMap.heroes.h2.c === c && editMap.heroes.h2.r === r) delete editMap.heroes.h2;
+            if (editMap.heroes.h3 && editMap.heroes.h3.c === c && editMap.heroes.h3.r === r) delete editMap.heroes.h3; // 영웅3 겹치면 지우기
             editMap.monsters = editMap.monsters.filter(m => !(m.c === c && m.r === r));
             editMap.obstacles = editMap.obstacles.filter(o => !(o.c === c && o.r === r));
             editMap.traps = editMap.traps.filter(t => !(t.c === c && t.r === r));
@@ -4060,6 +4108,7 @@ mList.appendChild(div);
 
             if (currentPalette === 'h1') editMap.heroes.h1 = {c, r};
             else if (currentPalette === 'h2') editMap.heroes.h2 = {c, r};
+            else if (currentPalette === 'h3') editMap.heroes.h3 = {c, r}; // 영웅3 배치하기
             else if (currentPalette === 'obs') editMap.obstacles.push({c, r});
             else if (currentPalette === 'trap') editMap.traps.push({c, r});
             else if (currentPalette === 'door') editMap.doors.push({c, r, opened: false});
@@ -4071,8 +4120,22 @@ mList.appendChild(div);
     function renderEditorMap() {
         renderStaticObjects('editor-static-layer', editMap.obstacles, editMap.traps, editMap.doors || []);
         const layer = document.getElementById('editor-entity-layer'); layer.innerHTML = '';
-        if(editMap.heroes.h1) { const el = document.createElement('div'); el.className = 'entity-sprite'; const pos = getHexPos(editMap.heroes.h1.c, editMap.heroes.h1.r); el.style.left = `${pos.x}px`; el.style.top = `${pos.y}px`; el.innerHTML = '<img src="https://itimg.kr/5341/brute.jpg" class="monster-img">'; layer.appendChild(el); }
-        if(editMap.heroes.h2) { const el = document.createElement('div'); el.className = 'entity-sprite'; const pos = getHexPos(editMap.heroes.h2.c, editMap.heroes.h2.r); el.style.left = `${pos.x}px`; el.style.top = `${pos.y}px`; el.innerHTML = "🧙‍♀️"; layer.appendChild(el); }
+        
+        // 공통 파란색 동그라미 스타일 함수
+        const createHeroBadge = (num) => `<div style="width: 30px; height: 30px; background-color: #007bff; color: #fff; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-weight: bold; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.5); font-size: 16px;">${num}</div>`;
+
+        // 영웅 1, 2, 3 위치 표시
+        if(editMap.heroes.h1) { 
+            const el = document.createElement('div'); el.className = 'entity-sprite'; const pos = getHexPos(editMap.heroes.h1.c, editMap.heroes.h1.r); el.style.left = `${pos.x}px`; el.style.top = `${pos.y}px`; el.innerHTML = createHeroBadge(1); layer.appendChild(el); 
+        }
+        
+        if(editMap.heroes.h2) { 
+            const el = document.createElement('div'); el.className = 'entity-sprite'; const pos = getHexPos(editMap.heroes.h2.c, editMap.heroes.h2.r); el.style.left = `${pos.x}px`; el.style.top = `${pos.y}px`; el.innerHTML = createHeroBadge(2); layer.appendChild(el); 
+        }
+
+        if(editMap.heroes.h3) { 
+            const el = document.createElement('div'); el.className = 'entity-sprite'; const pos = getHexPos(editMap.heroes.h3.c, editMap.heroes.h3.r); el.style.left = `${pos.x}px`; el.style.top = `${pos.y}px`; el.innerHTML = createHeroBadge(3); layer.appendChild(el); 
+        }
         
         editMap.monsters.forEach(m => {
             const el = document.createElement('div'); el.className = 'entity-sprite'; const pos = getHexPos(m.c, m.r); el.style.left = `${pos.x}px`; el.style.top = `${pos.y}px`;
